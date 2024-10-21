@@ -4,6 +4,5 @@
 
 ## Materials
 
-The Vole architecture and machine language specified in the appendix of the book "[Computer Science: An Overview, 13th edition](https://www.pearson.com/en-us/subject-catalog/p/computer-science-an-overview/P200000003351/9780137503216)": [materials/vole-isa.pdf](./materials/vole-isa.pdf)
-
-Studying concepts of computer architecture is **required** to implement such machine, which is also included in the second chapter from the same book: [materials/comp-arch.pdf](./materials/comp-arch.pdf)
+- [vole-isa.pdf](./materials/vole-isa.pdf): The Vole architecture and machine language specification from the appendix of the book, Computer Science: An Overview by J. Glenn Brookshear, Dennis Brylow.
+- [comp-arch.pdf](./materials/comp-arch.pdf): The 2nd chapter of the same book, an introduction to concepts of computer architecture, which is required to implement a machine such as Vole.
