@@ -6,7 +6,9 @@ project(vole-sim
         LANGUAGES CXX)
 
 file(GLOB_RECURSE sources src/*.cpp src/*.h)
-add_executable(vole-sim ${sources})
+add_executable(vole-sim ${sources}
+        vole.h
+        vole.cpp)
 set_property(TARGET vole-sim PROPERTY CXX_STANDARD 17)
 set_property(TARGET vole-sim PROPERTY CXX_STANDARD_REQUIRED On)
 set_property(TARGET vole-sim PROPERTY CXX_EXTENSIONS Off)
