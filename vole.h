@@ -25,6 +25,13 @@ enum Reg {
 };
 
 class VoleMachine {
+public:
+    void show_mem(){}
+    void set_mem(int index){}
+    uint8_t get_mem(int index){}
+    void show_reg(){}
+    void set_reg(int index){}
+    uint8_t get_reg(int index){}
 private:
     uint8_t pc;
     uint8_t mem[256];
@@ -35,13 +42,14 @@ class Instruction {
 public:
     explicit Instruction(VoleMachine& mac): machine(mac) {};
     virtual void run() {};
-private:
+protected:
     VoleMachine& machine;
 };
 
 class Load1 : public Instruction {
 public:
     explicit Load1(VoleMachine& mac) : Instruction(mac) {}
+    void run();
 };
 
 class Load2 : public Instruction {
