@@ -5,17 +5,82 @@ project(vole-sim
         DESCRIPTION "Vole Machine Simulator & GUI"
         LANGUAGES CXX)
 
-file(GLOB_RECURSE sources src/*.cpp src/*.h)
+find_package(OpenGL REQUIRED)
 
-add_executable(vole-sim ${sources})
+include_directories(${OPENGL_INCLUDE_DIRS})
 
-set_property(TARGET vole-sim PROPERTY CXX_STANDARD 17)
-set_property(TARGET vole-sim PROPERTY CXX_STANDARD_REQUIRED On)
-set_property(TARGET vole-sim PROPERTY CXX_EXTENSIONS Off)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL  "GLFW lib only")
+set(GLFW_INSTALL OFF CACHE BOOL  "GLFW lib only")
+set(GLAD_GL "")
+set(IMGUI_DIR imgui/)
+
+add_subdirectory(glfw)
+
+option(VOLE-SIM-GUI-USE-GLFW-GLAD "Use GLAD from GLFW" ON)
+
+if(VOLE-SIM-GUI-USE-GLFW-GLAD)
+    include_directories("${GLFW_SOURCE_DIR}/deps")
+    set(GLAD_GL "${GLFW_SOURCE_DIR}/deps/glad/gl.h")
+endif()
+
+if(MSVC)
+    SET( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup" )
+endif()
+
+add_executable(
+  vole-sim
+  src/cli.cpp
+  src/vole.cpp
+  src/vole.h
+)
+
+add_executable(
+  vole-sim-gui
+  WIN32
+  src/gui.cpp
+  src/vole.cpp
+  src/vole.h
+  ${GLAD_GL}
+  # Dear ImGui files
+  ${IMGUI_DIR}/imconfig.h
+  ${IMGUI_DIR}/imgui.h
+  ${IMGUI_DIR}/imstb_rectpack.h
+  ${IMGUI_DIR}/imstb_textedit.h
+  ${IMGUI_DIR}/imstb_truetype.h
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.h
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.h
+  ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_demo.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+)
+
+target_link_libraries(vole-sim-gui ${OPENGL_LIBRARIES} glfw)
+
+if(MSVC)
+    if(${CMAKE_VERSION} VERSION_LESS "3.6.0")
+        message("\n\t[ WARNING ]\n\n\tCMake version lower than 3.6.\n\n\t - Please update CMake and rerun; OR\n\t - Manually set 'vole-sim-gui' as StartUp Project in Visual Studio.\n")
+    else()
+        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT vole-sim-gui)
+    endif()
+endif()
+
+set_property(TARGET vole-sim vole-sim-gui PROPERTY CXX_STANDARD 17)
+set_property(TARGET vole-sim vole-sim-gui PROPERTY CXX_STANDARD_REQUIRED On)
+set_property(TARGET vole-sim vole-sim-gui PROPERTY CXX_EXTENSIONS Off)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(vole-sim PRIVATE -Wall -Wextra -fno-omit-frame-pointer -fsanitize=address)
     target_link_options(vole-sim PRIVATE -fno-omit-frame-pointer -fsanitize=address)
+    target_compile_options(vole-sim-gui PRIVATE -Wall -Wextra -fno-omit-frame-pointer -fsanitize=address)
+    target_link_options(vole-sim-gui PRIVATE -fno-omit-frame-pointer -fsanitize=address)
   endif()
 endif()
+
+target_include_directories(vole-sim-gui PRIVATE ${IMGUI_DIR})
+target_include_directories(vole-sim-gui PRIVATE ${IMGUI_DIR}/backends)
