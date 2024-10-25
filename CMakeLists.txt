@@ -5,6 +5,10 @@ project(vole-sim
         DESCRIPTION "Vole Machine Simulator & GUI"
         LANGUAGES CXX)
 
+if(POLICY CMP0072)
+  cmake_policy(SET CMP0072 NEW)
+endif()
+
 find_package(OpenGL REQUIRED)
 
 include_directories(${OPENGL_INCLUDE_DIRS})

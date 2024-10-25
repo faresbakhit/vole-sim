@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <functional>
-#include <ostream>
+#include <iostream>
 
 namespace vole {
 class Memory {
@@ -61,98 +61,100 @@ public:
 	void step();
 };
 
-class Instruction {
-public:
-	explicit Instruction(Machine *);
-	virtual void execute() = 0;
-
-protected:
-	Machine *m_Machine;
-};
-
 class ControlUnit {
 public:
-	explicit ControlUnit(Machine *);
-	Instruction *decodeInstruction();
+	uint16_t
+		/// Full instruction (16 bits wide).
+		inst, 
+		/// Operation code (4 bits wide). Bits [15:12]
+		opcode,
+		/// First instruction operand (4 bits wide). Bits [11:8].
+		operand1,
+		/// Second instruction operand (4 bits wide). Bits [7:4].
+		operand2,
+		/// Third instruction operand (4 bits wide). Bits [3:0].
+		operand3;
+	Machine *mac;
 
-private:
-	Machine *m_Machine;
+	explicit ControlUnit(Machine *);
+	static ControlUnit* decode(Machine *);
+	virtual void execute() = 0;
 };
 
-class Load1 : public Instruction {
+class Load1 : public ControlUnit {
 public:
 	explicit Load1(Machine *);
 	virtual void execute() override;
 };
 
-class Load2 : public Instruction {
+class Load2 : public ControlUnit {
 public:
 	explicit Load2(Machine *);
 	virtual void execute() override;
 };
 
-class Store : public Instruction {
+class Store : public ControlUnit{
 public:
 	explicit Store(Machine *);
 	virtual void execute() override;
 };
 
-class Move : public Instruction {
+class Move : public ControlUnit{
 public:
 	explicit Move(Machine *);
 	virtual void execute() override;
 };
 
-class Add1 : public Instruction {
+class Add1 : public ControlUnit{
 public:
 	explicit Add1(Machine *);
 	virtual void execute() override;
 };
 
-class Add2 : public Instruction {
+class Add2 : public ControlUnit{
 public:
 	explicit Add2(Machine *);
 	virtual void execute() override;
 };
 
-class Or : public Instruction {
+class Or : public ControlUnit {
 public:
 	explicit Or(Machine *);
 	virtual void execute() override;
 };
 
-class And : public Instruction {
+class And : public ControlUnit {
 public:
 	explicit And(Machine *);
 	virtual void execute() override;
 };
 
-class Xor : public Instruction {
+class Xor : public ControlUnit{
 public:
 	explicit Xor(Machine *);
 	virtual void execute() override;
 };
 
-class Rotate : public Instruction {
+class Rotate : public ControlUnit {
 public:
 	explicit Rotate(Machine *);
 	virtual void execute() override;
 };
 
-class Jump : public Instruction {
+class Jump : public ControlUnit {
 public:
 	explicit Jump(Machine *);
 	virtual void execute() override;
 };
 
-class Halt : public Instruction {
+class Halt : public ControlUnit {
 public:
 	explicit Halt(Machine *);
 	virtual void execute() override;
 };
 
-inline extern const std::function<Instruction *(Machine *)>
-	instructionFactory[]{
+inline extern const std::function<ControlUnit *(Machine *)>
+	controlUnitFactory[]{
 		[](Machine *mac) { return new Load1(mac); },
 		[](Machine *mac) { return new Load2(mac); },
 		[](Machine *mac) { return new Store(mac); },

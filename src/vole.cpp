@@ -17,7 +17,7 @@ bool Machine::loadProgram(const std::string &path, uint8_t addr) {
 
 bool Machine::loadProgram(std::istream &stream, uint8_t addr) {
 	uint16_t inst;
-	for (uint8_t i = addr; !stream.eof(); i += 2) {
+	for (size_t i = addr; !stream.eof(); i += 2) {
 		if (i >= 2 * 128) {
 			log << "Program too big (>128 instructions).\n";
 			return false;
@@ -40,8 +40,7 @@ void Machine::run() {
 }
 
 void Machine::step() {
-	ControlUnit cu(this);
-	Instruction *inst = cu.decodeInstruction();
+	ControlUnit *inst = ControlUnit::decode(this);
 	inst->execute();
 }
 
@@ -57,20 +56,26 @@ uint8_t &Registers::operator[](uint8_t i) { return m_Array[i]; }
 
 uint8_t Registers::operator[](uint8_t i) const { return m_Array[i]; }
 
-ControlUnit::ControlUnit(Machine *mac) : m_Machine(mac) {}
-
-Instruction *ControlUnit::decodeInstruction() {
-	uint8_t opcode = m_Machine->mem[m_Machine->reg.pc] >> 4;
-	if (opcode < 1 || opcode > 12) {
-		m_Machine->log << "Op-code not in range [1-12]: " << opcode
-					   << ". Halting.\n";
-		return new Halt(m_Machine);
-	}
-	auto newInstruction = instructionFactory[opcode - 1];
-	return newInstruction(m_Machine);
+ControlUnit::ControlUnit(Machine *machine) : mac(machine) {
+	inst = mac->mem[mac->reg.pc];
+	inst = (inst << 8) | mac->mem[mac->reg.pc + 1];
+	opcode = inst >> 12;
+	operand1 = (inst >> 8) & 0x0F;
+	operand2 = (inst >> 4) & 0x00F;
+	operand3 = inst & 0x000F;
+	mac->reg.pc += 2;
 }
 
-Instruction::Instruction(Machine *mac) : m_Machine(mac) {}
+ControlUnit* ControlUnit::decode(Machine *mac) {
+	uint8_t opcode = mac->mem[mac->reg.pc] >> 4;
+	if (opcode < 1 || opcode > 12) {
+		mac->log << "Op-code not in range [1-12]: " << opcode
+					   << ". Halting.\n";
+		return new Halt(mac);
+	}
+	auto newControlUnit = controlUnitFactory[opcode - 1];
+	return newControlUnit(mac);
+}
 
 void Load1::execute() {}
 
@@ -79,11 +84,9 @@ void Load2::execute() {}
 void Store::execute() {}
 
 void Move::execute() {
-	uint8_t rs = m_Machine->mem[1 + m_Machine->reg.pc];
-	uint8_t r = rs >> 4;
-	uint8_t s = rs & 0x0F;
-	m_Machine->reg[s] = m_Machine->reg[r];
-	m_Machine->reg.pc += 2;
+	uint8_t r = operand2;
+	uint8_t s = operand3;
+	mac->reg[s] = mac->reg[r];
 }
 
 void Add1::execute() {}
@@ -100,28 +103,28 @@ void Rotate::execute() {}
 
 void Jump::execute() {}
 
-void Halt::execute() { m_Machine->shouldHalt = true; }
+void Halt::execute() { mac->shouldHalt = true; }
 
-Load1::Load1(Machine *mac) : Instruction(mac) {}
+Load1::Load1(Machine *mac) : ControlUnit(mac) {}
 
-Load2::Load2(Machine *mac) : Instruction(mac) {}
+Load2::Load2(Machine *mac) : ControlUnit(mac) {}
 
-Store::Store(Machine *mac) : Instruction(mac) {}
+Store::Store(Machine *mac) : ControlUnit(mac) {}
 
-Move::Move(Machine *mac) : Instruction(mac) {}
+Move::Move(Machine *mac) : ControlUnit(mac) {}
 
-Add1::Add1(Machine *mac) : Instruction(mac) {}
+Add1::Add1(Machine *mac) : ControlUnit(mac) {}
 
-Add2::Add2(Machine *mac) : Instruction(mac) {}
+Add2::Add2(Machine *mac) : ControlUnit(mac) {}
 
-Or::Or(Machine *mac) : Instruction(mac) {}
+Or::Or(Machine *mac) : ControlUnit(mac) {}
 
-And::And(Machine *mac) : Instruction(mac) {}
+And::And(Machine *mac) : ControlUnit(mac) {}
 
-Xor::Xor(Machine *mac) : Instruction(mac) {}
+Xor::Xor(Machine *mac) : ControlUnit(mac) {}
 
-Rotate::Rotate(Machine *mac) : Instruction(mac) {}
+Rotate::Rotate(Machine *mac) : ControlUnit(mac) {}
 
-Jump::Jump(Machine *mac) : Instruction(mac) {}
+Jump::Jump(Machine *mac) : ControlUnit(mac) {}
 
-Halt::Halt(Machine *mac) : Instruction(mac) {}
+Halt::Halt(Machine *mac) : ControlUnit(mac) {}
