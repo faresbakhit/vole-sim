@@ -1,10 +1,19 @@
+#include <fstream>
 #include <iostream>
 
 #include "vole.h"
 
-using namespace Vole;
+using namespace vole;
 
 Machine::Machine(std::ostream &logStream) : log(logStream) {}
+
+bool Machine::loadProgram(const std::string &path, uint8_t addr) {
+	std::ifstream ifs(path);
+	if (ifs.fail()) {
+		return false;
+	}
+	return loadProgram(ifs);
+}
 
 bool Machine::loadProgram(std::istream &stream, uint8_t addr) {
 	uint16_t inst;
@@ -53,7 +62,8 @@ ControlUnit::ControlUnit(Machine *mac) : m_Machine(mac) {}
 Instruction *ControlUnit::decodeInstruction() {
 	uint8_t opcode = m_Machine->mem[m_Machine->reg.pc] >> 4;
 	if (opcode < 1 || opcode > 12) {
-		m_Machine->log << "Op-code not in range [1-12]: " << opcode << ". Halting.\n";
+		m_Machine->log << "Op-code not in range [1-12]: " << opcode
+					   << ". Halting.\n";
 		return new Halt(m_Machine);
 	}
 	auto newInstruction = instructionFactory[opcode - 1];

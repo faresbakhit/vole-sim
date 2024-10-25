@@ -5,7 +5,7 @@
 #include <functional>
 #include <ostream>
 
-namespace Vole {
+namespace vole {
 class Memory {
 public:
 	Memory();
@@ -37,10 +37,21 @@ public:
 
 	Machine(std::ostream &logStream = std::cerr);
 
-	/// @brief Load program from `from` and put it in memory starting at cell `at`
+	/// @brief Load program from `from` and put it in memory starting at cell
+	/// `at`
+	/// @param fromPath The input file path to load the program from (in
+	/// hexadecimal).
+	/// @param at The starting memory address to put the program at.
+	/// @return `true` if `from.fail()` never returned `true` after a read,
+	/// otherwise `false`.
+	bool loadProgram(const std::string &fromPath, uint8_t at = 0);
+
+	/// @brief Load program from `from` and put it in memory starting at cell
+	/// `at`
 	/// @param from The input stream to load the program from (in hexadecimal).
 	/// @param at The starting memory address to put the program at.
-	/// @return `true` if `from.fail()` never returned `true` after a read, otherwise `false`.
+	/// @return `true` if `from.fail()` never returned `true` after a read,
+	/// otherwise `false`.
 	bool loadProgram(std::istream &from, uint8_t at = 0);
 
 	/// @brief Run indefinitely.
@@ -140,14 +151,21 @@ public:
 	virtual void execute() override;
 };
 
-inline extern const std::function<Instruction *(Machine *)> instructionFactory[]{
-	[](Machine *mac) { return new Load1(mac); }, [](Machine *mac) { return new Load2(mac); },
-	[](Machine *mac) { return new Store(mac); }, [](Machine *mac) { return new Move(mac); },
-	[](Machine *mac) { return new Add1(mac); },  [](Machine *mac) { return new Add2(mac); },
-	[](Machine *mac) { return new Or(mac); },	 [](Machine *mac) { return new And(mac); },
-	[](Machine *mac) { return new Xor(mac); },	[](Machine *mac) { return new Rotate(mac); },
-	[](Machine *mac) { return new Jump(mac); },  [](Machine *mac) { return new Halt(mac); },
-};
-} // namespace Vole
+inline extern const std::function<Instruction *(Machine *)>
+	instructionFactory[]{
+		[](Machine *mac) { return new Load1(mac); },
+		[](Machine *mac) { return new Load2(mac); },
+		[](Machine *mac) { return new Store(mac); },
+		[](Machine *mac) { return new Move(mac); },
+		[](Machine *mac) { return new Add1(mac); },
+		[](Machine *mac) { return new Add2(mac); },
+		[](Machine *mac) { return new Or(mac); },
+		[](Machine *mac) { return new And(mac); },
+		[](Machine *mac) { return new Xor(mac); },
+		[](Machine *mac) { return new Rotate(mac); },
+		[](Machine *mac) { return new Jump(mac); },
+		[](Machine *mac) { return new Halt(mac); },
+	};
+} // namespace vole
 
 #endif // VOLE_SIM_VOLE_H
