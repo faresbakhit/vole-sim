@@ -1,4 +1,3 @@
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -6,12 +5,17 @@
 
 #include "vole.h"
 
-enum class base { dec, hex };
+enum class base
+{
+	dec,
+	hex
+};
 
 template <typename T>
 T inNumber(std::istream &in, base b = base::dec,
 		   T min = std::numeric_limits<T>::min,
-		   T max = std::numeric_limits<T>::max) {
+		   T max = std::numeric_limits<T>::max)
+{
 	T i;
 	if (b == base::hex) {
 		in >> std::hex >> i;
@@ -33,7 +37,8 @@ T inNumber(std::istream &in, base b = base::dec,
 	return i;
 }
 
-void regShow(vole::Registers &reg) {
+void regShow(vole::Registers &reg)
+{
 	for (int i = 0; i < 16; i += 1) {
 		if (i != 0 && i % 4 == 0) {
 			std::cout << "\n";
@@ -48,25 +53,37 @@ void regShow(vole::Registers &reg) {
 	}
 }
 
-void regGet(std::istream &in, const vole::Registers &reg) {
+void regGet(std::istream &in, const vole::Registers &reg)
+{
 	int i = inNumber(in, base::dec, 0, 15);
 	std::cout << "R" << std::dec << i << ": " << std::hex << std::uppercase
 			  << std::setfill('0') << std::setw(2) << (int)reg[i] << "\n";
 }
 
-void regSet(std::istream &in, vole::Registers &reg) {
+void regSet(std::istream &in, vole::Registers &reg)
+{
 	int i = inNumber(in, base::dec, 0, 15);
 	int val = inNumber(in, base::hex, 0, 255);
 	reg[i] = val;
 }
 
-void memShow() { /* TODO */ }
+void memShow()
+{
+	/* TODO */
+}
 
-void memGet() { /* TODO */ }
+void memGet()
+{
+	/* TODO */
+}
 
-void memSet() { /* TODO*/ }
+void memSet()
+{
+	/* TODO */
+}
 
-int main() {
+int main()
+{
 	std::cout
 		<< ">> Welcome to the Vole Machine Simulator & GUI\n"
 		<< ">>\n"

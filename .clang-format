@@ -6,4 +6,5 @@ UseTab: Always
 LineEnding: LF
 IndentAccessModifiers: false
 AccessModifierOffset: -4
-...
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Mozilla

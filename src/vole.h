@@ -1,12 +1,12 @@
-#ifndef VOLE_SIM_VOLE_H
-#define VOLE_SIM_VOLE_H
+#pragma once
 
 #include <cstdint>
 #include <functional>
 #include <iostream>
 
 namespace vole {
-class Memory {
+class Memory
+{
 public:
 	Memory();
 	uint8_t &operator[](uint8_t);
@@ -16,7 +16,8 @@ private:
 	uint8_t m_Array[256];
 };
 
-class Registers {
+class Registers
+{
 public:
 	uint8_t pc;
 
@@ -28,7 +29,8 @@ private:
 	uint8_t m_Array[16];
 };
 
-class Machine {
+class Machine
+{
 public:
 	Memory mem;
 	Registers reg;
@@ -61,11 +63,12 @@ public:
 	void step();
 };
 
-class ControlUnit {
+class ControlUnit
+{
 public:
 	uint16_t
 		/// Full instruction (16 bits wide).
-		inst, 
+		inst,
 		/// Operation code (4 bits wide). Bits [15:12]
 		opcode,
 		/// First instruction operand (4 bits wide). Bits [11:8].
@@ -77,77 +80,89 @@ public:
 	Machine *mac;
 
 	explicit ControlUnit(Machine *);
-	static ControlUnit* decode(Machine *);
+	static ControlUnit *decode(Machine *);
 	virtual void execute() = 0;
 };
 
-class Load1 : public ControlUnit {
+class Load1 : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Load2 : public ControlUnit {
+class Load2 : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Store : public ControlUnit{
+class Store : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Move : public ControlUnit{
+class Move : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Add1 : public ControlUnit{
+class Add1 : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Add2 : public ControlUnit{
+class Add2 : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Or : public ControlUnit {
+class Or : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class And : public ControlUnit {
+class And : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Xor : public ControlUnit{
+class Xor : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Rotate : public ControlUnit {
+class Rotate : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Jump : public ControlUnit {
+class Jump : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
-class Halt : public ControlUnit {
+class Halt : public ControlUnit
+{
 public:
 	using ControlUnit::ControlUnit;
 	virtual void execute() override;
@@ -169,5 +184,3 @@ inline extern const std::function<ControlUnit *(Machine *)>
 		[](Machine *mac) { return new Halt(mac); },
 	};
 } // namespace vole
-
-#endif // VOLE_SIM_VOLE_H

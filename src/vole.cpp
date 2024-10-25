@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 
@@ -7,7 +8,8 @@ using namespace vole;
 
 Machine::Machine(std::ostream &logStream) : log(logStream) {}
 
-bool Machine::loadProgram(const std::string &path, uint8_t addr) {
+bool Machine::loadProgram(const std::string &path, uint8_t addr)
+{
 	std::ifstream ifs(path);
 	if (ifs.fail()) {
 		return false;
@@ -15,7 +17,8 @@ bool Machine::loadProgram(const std::string &path, uint8_t addr) {
 	return loadProgram(ifs);
 }
 
-bool Machine::loadProgram(std::istream &stream, uint8_t addr) {
+bool Machine::loadProgram(std::istream &stream, uint8_t addr)
+{
 	uint16_t inst;
 	for (size_t i = addr; !stream.eof(); i += 2) {
 		if (i >= 2 * 128) {
@@ -33,30 +36,45 @@ bool Machine::loadProgram(std::istream &stream, uint8_t addr) {
 	return true;
 }
 
-void Machine::run() {
+void Machine::run()
+{
 	reg.pc = 0;
 	while (!shouldHalt)
 		step();
 }
 
-void Machine::step() {
+void Machine::step()
+{
 	ControlUnit *inst = ControlUnit::decode(this);
 	inst->execute();
 }
 
 Memory::Memory() : m_Array() {}
 
-uint8_t &Memory::operator[](uint8_t idx) { return m_Array[idx]; }
+uint8_t &Memory::operator[](uint8_t idx)
+{
+	return m_Array[idx];
+}
 
-uint8_t Memory::operator[](uint8_t idx) const { return m_Array[idx]; }
+uint8_t Memory::operator[](uint8_t idx) const
+{
+	return m_Array[idx];
+}
 
 Registers::Registers() : m_Array(), pc(0) {}
 
-uint8_t &Registers::operator[](uint8_t i) { return m_Array[i]; }
+uint8_t &Registers::operator[](uint8_t i)
+{
+	return m_Array[i];
+}
 
-uint8_t Registers::operator[](uint8_t i) const { return m_Array[i]; }
+uint8_t Registers::operator[](uint8_t i) const
+{
+	return m_Array[i];
+}
 
-ControlUnit::ControlUnit(Machine *machine) : mac(machine) {
+ControlUnit::ControlUnit(Machine *machine) : mac(machine)
+{
 	inst = mac->mem[mac->reg.pc];
 	inst = (inst << 8) | mac->mem[mac->reg.pc + 1];
 	opcode = inst >> 12;
@@ -66,11 +84,11 @@ ControlUnit::ControlUnit(Machine *machine) : mac(machine) {
 	mac->reg.pc += 2;
 }
 
-ControlUnit* ControlUnit::decode(Machine *mac) {
+ControlUnit *ControlUnit::decode(Machine *mac)
+{
 	uint8_t opcode = mac->mem[mac->reg.pc] >> 4;
 	if (opcode < 1 || opcode > 12) {
-		mac->log << "Op-code not in range [1-12]: " << opcode
-					   << ". Halting.\n";
+		mac->log << "Op-code not in range [1-12]: " << opcode << ". Halting.\n";
 		return new Halt(mac);
 	}
 	auto newControlUnit = controlUnitFactory[opcode - 1];
@@ -83,7 +101,8 @@ void Load2::execute() {}
 
 void Store::execute() {}
 
-void Move::execute() {
+void Move::execute()
+{
 	uint8_t r = operand2;
 	uint8_t s = operand3;
 	mac->reg[s] = mac->reg[r];
@@ -103,4 +122,7 @@ void Rotate::execute() {}
 
 void Jump::execute() {}
 
-void Halt::execute() { mac->shouldHalt = true; }
+void Halt::execute()
+{
+	mac->shouldHalt = true;
+}
