@@ -104,27 +104,3 @@ void Rotate::execute() {}
 void Jump::execute() {}
 
 void Halt::execute() { mac->shouldHalt = true; }
-
-Load1::Load1(Machine *mac) : ControlUnit(mac) {}
-
-Load2::Load2(Machine *mac) : ControlUnit(mac) {}
-
-Store::Store(Machine *mac) : ControlUnit(mac) {}
-
-Move::Move(Machine *mac) : ControlUnit(mac) {}
-
-Add1::Add1(Machine *mac) : ControlUnit(mac) {}
-
-Add2::Add2(Machine *mac) : ControlUnit(mac) {}
-
-Or::Or(Machine *mac) : ControlUnit(mac) {}
-
-And::And(Machine *mac) : ControlUnit(mac) {}
-
-Xor::Xor(Machine *mac) : ControlUnit(mac) {}
-
-Rotate::Rotate(Machine *mac) : ControlUnit(mac) {}
-
-Jump::Jump(Machine *mac) : ControlUnit(mac) {}
-
-Halt::Halt(Machine *mac) : ControlUnit(mac) {}

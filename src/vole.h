@@ -83,73 +83,73 @@ public:
 
 class Load1 : public ControlUnit {
 public:
-	explicit Load1(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Load2 : public ControlUnit {
 public:
-	explicit Load2(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Store : public ControlUnit{
 public:
-	explicit Store(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Move : public ControlUnit{
 public:
-	explicit Move(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Add1 : public ControlUnit{
 public:
-	explicit Add1(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Add2 : public ControlUnit{
 public:
-	explicit Add2(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Or : public ControlUnit {
 public:
-	explicit Or(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class And : public ControlUnit {
 public:
-	explicit And(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Xor : public ControlUnit{
 public:
-	explicit Xor(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Rotate : public ControlUnit {
 public:
-	explicit Rotate(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Jump : public ControlUnit {
 public:
-	explicit Jump(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
 class Halt : public ControlUnit {
 public:
-	explicit Halt(Machine *);
+	using ControlUnit::ControlUnit;
 	virtual void execute() override;
 };
 
