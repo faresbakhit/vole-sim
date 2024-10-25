@@ -47,6 +47,7 @@ void Machine::step()
 {
 	ControlUnit *inst = ControlUnit::decode(this);
 	inst->execute();
+	delete inst;
 }
 
 Memory::Memory() : m_Array() {}
@@ -95,9 +96,17 @@ ControlUnit *ControlUnit::decode(Machine *mac)
 	return newControlUnit(mac);
 }
 
-void Load1::execute() {}
+void Load1::execute() {
+	uint8_t r=operand1;
+	uint16_t xy=(inst&0x00FF);
+	mac->reg[r]=mac->mem[xy];
+}
 
-void Load2::execute() {}
+void Load2::execute() {
+	uint8_t r=operand1;
+	uint16_t xy=(inst&0x00FF);
+	mac->reg[r]=xy;
+}
 
 void Store::execute() {}
 
@@ -108,11 +117,21 @@ void Move::execute()
 	mac->reg[s] = mac->reg[r];
 }
 
-void Add1::execute() {}
+void Add1::execute() {
+	uint8_t r = operand1;
+	uint8_t s = operand2;
+	uint8_t t = operand3;
+	mac->reg[r]=mac->reg[s]+mac->reg[t];
+}
 
 void Add2::execute() {}
 
-void Or::execute() {}
+void Or::execute() {
+	uint8_t r = operand1;
+	uint8_t s = operand2;
+	uint8_t t = operand3;
+	mac->reg[r]=mac->reg[s]|mac->reg[t];
+}
 
 void And::execute() {}
 

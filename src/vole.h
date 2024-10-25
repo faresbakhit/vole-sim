@@ -37,7 +37,7 @@ public:
 	std::ostream &log;
 	bool shouldHalt;
 
-	Machine(std::ostream &logStream = std::cerr);
+	explicit Machine(std::ostream &logStream = std::cerr);
 
 	/// @brief Load program from `from` and put it in memory starting at cell
 	/// `at`
@@ -88,84 +88,84 @@ class Load1 : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Load2 : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Store : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Move : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Add1 : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Add2 : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Or : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class And : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Xor : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Rotate : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Jump : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 class Halt : public ControlUnit
 {
 public:
 	using ControlUnit::ControlUnit;
-	virtual void execute() override;
+	void execute() override;
 };
 
 inline extern const std::function<ControlUnit *(Machine *)>

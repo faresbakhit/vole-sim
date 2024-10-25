@@ -67,19 +67,44 @@ void regSet(std::istream &in, vole::Registers &reg)
 	reg[i] = val;
 }
 
-void memShow()
+void memShow(vole::Memory & mem)
 {
-	/* TODO */
+	std::cout<<"  |00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F\n"
+			 <<"--------------------------------------------------";
+
+	for (int i = 0; i < 256; i += 1) {
+		if (i % 16 == 0) {
+			std::cout << "\n"
+					  << std::hex
+					  << std::uppercase
+					  << std::setfill('0')
+					  << std::setw(2)
+					  <<i/16
+					  <<"|";
+
+		}
+		std::cout << std::hex
+				  << std::uppercase << std::setfill('0') << std::setw(2)
+				  << (int)mem[i];
+
+		std::cout << " ";
+
+	}
+	std::cout<<"\n";
 }
 
-void memGet()
+void memGet(std::istream &in, const vole::Memory& mem)
 {
-	/* TODO */
+	int i = inNumber(in, base::dec, 0, 255);
+	std::cout << "M" << std::dec << i << ": " << std::hex << std::uppercase
+			  << std::setfill('0') << std::setw(2) << (int)mem[i] << "\n";
 }
 
-void memSet()
+void memSet(std::istream &in, vole::Memory& mem)
 {
-	/* TODO */
+	int i = inNumber(in, base::dec, 0, 255);
+	int val = inNumber(in, base::hex, 0, 255);
+	mem[i] = val;
 }
 
 int main()
@@ -136,11 +161,11 @@ int main()
 			} else if (arg == "mem") {
 				argstr >> arg;
 				if (arg == "show") {
-					memShow();
+					memShow(mac.mem);
 				} else if (arg == "get") {
-					memGet();
+					memGet(argstr, mac.mem);
 				} else if (arg == "set") {
-					memSet();
+					memSet(argstr, mac.mem);
 				} else {
 					std::cerr << ">> Unknown.\n";
 				}
@@ -153,6 +178,6 @@ int main()
 			continue;
 		}
 	} while (1);
-
+	std::cerr<<">>I think therefore I am!\n";
 	std::cerr << ">> Moriturus te saluto.!\n";
 }
