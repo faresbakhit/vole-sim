@@ -56,7 +56,7 @@ public:
 	/// otherwise `false`.
 	bool loadProgram(std::istream &from, uint8_t at = 0);
 
-	/// @brief Run indefinitely.
+	/// @brief Run indefinitely. Only returns on shouldHalt == true.
 	void run();
 
 	/// @brief Only execute the next instruction.
@@ -66,6 +66,11 @@ public:
 class ControlUnit
 {
 public:
+	explicit ControlUnit(Machine *);
+	static ControlUnit *decode(Machine *);
+	virtual void execute() = 0;
+
+protected:
 	uint16_t
 		/// Full instruction (16 bits wide).
 		inst,
@@ -76,12 +81,11 @@ public:
 		/// Second instruction operand (4 bits wide). Bits [7:4].
 		operand2,
 		/// Third instruction operand (4 bits wide). Bits [3:0].
-		operand3;
-	Machine *mac;
+		operand3,
+		/// Half instruction (8 bits wide). Bits [7:0].
+		operandXY;
 
-	explicit ControlUnit(Machine *);
-	static ControlUnit *decode(Machine *);
-	virtual void execute() = 0;
+	Machine *mac;
 };
 
 class Load1 : public ControlUnit

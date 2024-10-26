@@ -38,6 +38,7 @@ bool Machine::loadProgram(std::istream &stream, uint8_t addr)
 
 void Machine::run()
 {
+	shouldHalt = false;
 	reg.pc = 0;
 	while (!shouldHalt)
 		step();
@@ -45,9 +46,9 @@ void Machine::run()
 
 void Machine::step()
 {
-	ControlUnit *inst = ControlUnit::decode(this);
-	inst->execute();
-	delete inst;
+	ControlUnit *cu = ControlUnit::decode(this);
+	cu->execute();
+	delete cu;
 }
 
 Memory::Memory() : m_Array() {}
@@ -82,6 +83,7 @@ ControlUnit::ControlUnit(Machine *machine) : mac(machine)
 	operand1 = (inst >> 8) & 0x0F;
 	operand2 = (inst >> 4) & 0x00F;
 	operand3 = inst & 0x000F;
+	operandXY = inst & 0x00FF;
 	mac->reg.pc += 2;
 }
 
@@ -96,16 +98,18 @@ ControlUnit *ControlUnit::decode(Machine *mac)
 	return newControlUnit(mac);
 }
 
-void Load1::execute() {
-	uint8_t r=operand1;
-	uint16_t xy=(inst&0x00FF);
-	mac->reg[r]=mac->mem[xy];
+void Load1::execute()
+{
+	uint8_t r = operand1;
+	uint16_t xy = operandXY;
+	mac->reg[r] = mac->mem[xy];
 }
 
-void Load2::execute() {
-	uint8_t r=operand1;
-	uint16_t xy=(inst&0x00FF);
-	mac->reg[r]=xy;
+void Load2::execute()
+{
+	uint8_t r = operand1;
+	uint16_t xy = operandXY;
+	mac->reg[r] = xy;
 }
 
 void Store::execute() {}
@@ -117,20 +121,22 @@ void Move::execute()
 	mac->reg[s] = mac->reg[r];
 }
 
-void Add1::execute() {
+void Add1::execute()
+{
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
-	mac->reg[r]=mac->reg[s]+mac->reg[t];
+	mac->reg[r] = mac->reg[s] + mac->reg[t];
 }
 
 void Add2::execute() {}
 
-void Or::execute() {
+void Or::execute()
+{
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
-	mac->reg[r]=mac->reg[s]|mac->reg[t];
+	mac->reg[r] = mac->reg[s] | mac->reg[t];
 }
 
 void And::execute() {}
@@ -139,14 +145,15 @@ void Xor::execute() {}
 
 void Rotate::execute() {}
 
-void Jump::execute() {
+void Jump::execute()
+{
 	/*CHECK FOR ERRORS*/
-	uint8_t r=operand1;
-	uint16_t xy=(inst&0x00FF);
-	if(mac->reg[r]==mac->reg[0])
-		mac->reg.pc=xy;
-	//maybe check xy if it is even or odd, to prevent pc from using half an instruction?
-
+	uint8_t r = operand1;
+	uint16_t xy = operandXY;
+	if (mac->reg[r] == mac->reg[0])
+		mac->reg.pc = xy;
+	// maybe check xy if it is even or odd, to prevent pc from using half an
+	// instruction?
 }
 
 void Halt::execute()

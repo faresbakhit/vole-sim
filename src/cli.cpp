@@ -5,6 +5,22 @@
 
 #include "vole.h"
 
+struct Hex
+{};
+
+Hex hex()
+{
+	return {};
+}
+
+template <typename CharT, typename Traits>
+std::basic_ostream<CharT, Traits> &
+operator<<(std::basic_ostream<CharT, Traits> &os, Hex)
+{
+	return os << std::hex << std::uppercase << std::setfill('0')
+			  << std::setw(2);
+}
+
 enum class base
 {
 	dec,
@@ -56,54 +72,38 @@ void regShow(vole::Registers &reg)
 void regGet(std::istream &in, const vole::Registers &reg)
 {
 	int i = inNumber(in, base::dec, 0, 15);
-	std::cout << "R" << std::dec << i << ": " << std::hex << std::uppercase
-			  << std::setfill('0') << std::setw(2) << (int)reg[i] << "\n";
+	std::cout << "R" << std::dec << i << ": " << hex() << (int)reg[i] << "\n";
 }
 
 void regSet(std::istream &in, vole::Registers &reg)
 {
 	int i = inNumber(in, base::dec, 0, 15);
-	int val = inNumber(in, base::hex, 0, 255);
+	int val = inNumber(in, base::hex, 0, 0xFF);
 	reg[i] = val;
 }
 
-void memShow(vole::Memory & mem)
+void memShow(vole::Memory &mem)
 {
-	std::cout<<"  |00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F\n"
-			 <<"--------------------------------------------------";
-
+	std::cout << "   │ 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F\n"
+			  << "───┼────────────────────────────────────────────────";
 	for (int i = 0; i < 256; i += 1) {
-		if (i % 16 == 0) {
-			std::cout << "\n"
-					  << std::hex
-					  << std::uppercase
-					  << std::setfill('0')
-					  << std::setw(2)
-					  <<i/16
-					  <<"|";
-
-		}
-		std::cout << std::hex
-				  << std::uppercase << std::setfill('0') << std::setw(2)
-				  << (int)mem[i];
-
-		std::cout << " ";
-
+		if (i % 16 == 0)
+			std::cout << "\n" << hex() << i / 16 << " │ ";
+		std::cout << hex() << (int)mem[i] << " ";
 	}
-	std::cout<<"\n";
+	std::cout << "\n";
 }
 
-void memGet(std::istream &in, const vole::Memory& mem)
+void memGet(std::istream &in, const vole::Memory &mem)
 {
-	int i = inNumber(in, base::dec, 0, 255);
-	std::cout << "M" << std::dec << i << ": " << std::hex << std::uppercase
-			  << std::setfill('0') << std::setw(2) << (int)mem[i] << "\n";
+	int i = inNumber(in, base::hex, 0, 0xFF);
+	std::cout << hex() << i << ": " << hex() << (int)mem[i] << "\n";
 }
 
-void memSet(std::istream &in, vole::Memory& mem)
+void memSet(std::istream &in, vole::Memory &mem)
 {
-	int i = inNumber(in, base::dec, 0, 255);
-	int val = inNumber(in, base::hex, 0, 255);
+	int i = inNumber(in, base::hex, 0, 0xFF);
+	int val = inNumber(in, base::hex, 0, 0xFF);
 	mem[i] = val;
 }
 
@@ -124,6 +124,8 @@ int main()
 		<< ">> - mem show: Show all memory cells and their values.\n"
 		<< ">> - mem get X: Get the value stored at memory cell X.\n"
 		<< ">> - mem set X Y: Set memory cell X to the value Y.\n"
+		<< ">> - pc get: Get the value of the program counter.\n"
+		<< ">> - pc set X: Set the program counter to the value X.\n"
 		<< ">> - exit: Exit the machine simulator.\n";
 
 	vole::Machine mac;
@@ -169,15 +171,25 @@ int main()
 				} else {
 					std::cerr << ">> Unknown.\n";
 				}
+			} else if (arg == "pc") {
+				argstr >> arg;
+				if (arg == "get") {
+					std::cout << "PC: " << std::hex << std::uppercase
+							  << std::setfill('0') << std::setw(2)
+							  << (int)mac.reg.pc << "\n";
+				} else if (arg == "set") {
+					int newPC = inNumber(argstr, base::hex, 0, 0xFF);
+					mac.reg.pc = newPC;
+				}
 			} else if (arg == "exit") {
 				break;
-			} else {
+			} else if (arg != "") {
 				std::cerr << ">> Unknown.\n";
 			}
 		} catch (const std::logic_error &) {
 			continue;
 		}
 	} while (1);
-	std::cerr<<">>I think therefore I am!\n";
+	std::cerr << ">> I think therefore I am!\n";
 	std::cerr << ">> Moriturus te saluto.!\n";
 }
