@@ -112,7 +112,12 @@ void Load2::execute()
 	mac->reg[r] = xy;
 }
 
-void Store::execute() {}
+void Store::execute()
+{
+    uint8_t r = operand1;
+    uint16_t xy = operandXY;
+    mac->reg[xy] = mac->mem[r];
+}
 
 void Move::execute()
 {
@@ -139,9 +144,21 @@ void Or::execute()
 	mac->reg[r] = mac->reg[s] | mac->reg[t];
 }
 
-void And::execute() {}
+void And::execute()
+{
+    uint8_t r = operand1;
+    uint8_t s = operand2;
+    uint8_t t = operand3;
+    mac->reg[r] = mac->reg[s] & mac->reg[t];
+}
 
-void Xor::execute() {}
+void Xor::execute()
+{
+    uint8_t r = operand1;
+    uint8_t s = operand2;
+    uint8_t t = operand3;
+    mac->reg[r] = mac->reg[s] ^ mac->reg[t];
+}
 
 void Rotate::execute() {}
 
