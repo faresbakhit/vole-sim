@@ -139,7 +139,15 @@ void Xor::execute() {}
 
 void Rotate::execute() {}
 
-void Jump::execute() {}
+void Jump::execute() {
+	/*CHECK FOR ERRORS*/
+	uint8_t r=operand1;
+	uint16_t xy=(inst&0x00FF);
+	if(mac->reg[r]==mac->reg[0])
+		mac->reg.pc=xy;
+	//maybe check xy if it is even or odd, to prevent pc from using half an instruction?
+
+}
 
 void Halt::execute()
 {
