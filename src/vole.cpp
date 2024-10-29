@@ -131,10 +131,12 @@ void Add1::execute()
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
-	mac->reg[r] = mac->reg[s] + mac->reg[t];
+	mac->reg[r] = (int8_t)mac->reg[s] + (int8_t)mac->reg[t];
 }
 
-void Add2::execute() {}
+void Add2::execute() {
+
+}
 
 void Or::execute()
 {
@@ -164,13 +166,13 @@ void Rotate::execute() {}
 
 void Jump::execute()
 {
-	/*CHECK FOR ERRORS*/
+
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
+	if(xy%2!=0)
+		xy--;
 	if (mac->reg[r] == mac->reg[0])
 		mac->reg.pc = xy;
-	// maybe check xy if it is even or odd, to prevent pc from using half an
-	// instruction?
 }
 
 void Halt::execute()
