@@ -162,7 +162,13 @@ void Xor::execute()
     mac->reg[r] = mac->reg[s] ^ mac->reg[t];
 }
 
-void Rotate::execute() {}
+void Rotate::execute() {
+	uint8_t r = operand1;
+	uint8_t t = operand3%8;
+	mac->reg[r] = ( ( mac->reg[r]>>t ) | ( mac->reg[r]<<( 8-t ) ) );
+
+
+}
 
 void Jump::execute()
 {
