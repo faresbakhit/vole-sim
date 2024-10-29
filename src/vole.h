@@ -69,6 +69,7 @@ public:
 	explicit ControlUnit(Machine *);
 	static ControlUnit *decode(Machine *);
 	virtual void execute() = 0;
+	virtual ~ControlUnit();
 
 protected:
 	uint16_t
@@ -93,6 +94,7 @@ class Load1 : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Load1();
 };
 
 class Load2 : public ControlUnit
@@ -100,6 +102,7 @@ class Load2 : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Load2();
 };
 
 class Store : public ControlUnit
@@ -107,6 +110,7 @@ class Store : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Store();
 };
 
 class Move : public ControlUnit
@@ -114,6 +118,7 @@ class Move : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Move();
 };
 
 class Add1 : public ControlUnit
@@ -121,6 +126,7 @@ class Add1 : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Add1();
 };
 
 class Add2 : public ControlUnit
@@ -128,6 +134,7 @@ class Add2 : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Add2();
 };
 
 class Or : public ControlUnit
@@ -135,6 +142,7 @@ class Or : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Or();
 };
 
 class And : public ControlUnit
@@ -142,6 +150,7 @@ class And : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~And();
 };
 
 class Xor : public ControlUnit
@@ -149,6 +158,7 @@ class Xor : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Xor();
 };
 
 class Rotate : public ControlUnit
@@ -156,6 +166,7 @@ class Rotate : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Rotate();
 };
 
 class Jump : public ControlUnit
@@ -163,6 +174,7 @@ class Jump : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Jump();
 };
 
 class Halt : public ControlUnit
@@ -170,6 +182,7 @@ class Halt : public ControlUnit
 public:
 	using ControlUnit::ControlUnit;
 	void execute() override;
+	~Halt();
 };
 
 inline extern const std::function<ControlUnit *(Machine *)>

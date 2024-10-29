@@ -1,4 +1,4 @@
-#include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 
@@ -14,7 +14,7 @@ bool Machine::loadProgram(const std::string &path, uint8_t addr)
 	if (ifs.fail()) {
 		return false;
 	}
-	return loadProgram(ifs);
+	return loadProgram(ifs, addr);
 }
 
 bool Machine::loadProgram(std::istream &stream, uint8_t addr)
@@ -63,7 +63,7 @@ uint8_t Memory::operator[](uint8_t idx) const
 	return m_Array[idx];
 }
 
-Registers::Registers() : m_Array(), pc(0) {}
+Registers::Registers() : pc(0), m_Array() {}
 
 uint8_t &Registers::operator[](uint8_t i)
 {
@@ -91,7 +91,8 @@ ControlUnit *ControlUnit::decode(Machine *mac)
 {
 	uint8_t opcode = mac->mem[mac->reg.pc] >> 4;
 	if (opcode < 1 || opcode > 12) {
-		mac->log << "Op-code not in range [1-12]: " << opcode << ". Halting.\n";
+		mac->log << "Op-code not in range [1-12]: " << +opcode
+				 << ". Halting.\n";
 		return new Halt(mac);
 	}
 	auto newControlUnit = controlUnitFactory[opcode - 1];
@@ -114,9 +115,9 @@ void Load2::execute()
 
 void Store::execute()
 {
-    uint8_t r = operand1;
-    uint16_t xy = operandXY;
-    mac->reg[xy] = mac->mem[r];
+	uint8_t r = operand1;
+	uint16_t xy = operandXY;
+	mac->reg[xy] = mac->mem[r];
 }
 
 void Move::execute()
@@ -131,11 +132,19 @@ void Add1::execute()
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
-	mac->reg[r] = (int8_t)mac->reg[s] + (int8_t)mac->reg[t];
+	mac->reg[r] = mac->reg[s] + mac->reg[t];
 }
 
-void Add2::execute() {
+float decodeFloat(uint8_t val);
+uint8_t encodeFloat(float val);
 
+void Add2::execute()
+{
+	uint8_t r = operand1;
+	uint8_t s = operand2;
+	uint8_t t = operand3;
+	mac->reg[r] =
+		encodeFloat(decodeFloat(mac->reg[s]) + decodeFloat(mac->reg[t]));
 }
 
 void Or::execute()
@@ -148,26 +157,25 @@ void Or::execute()
 
 void And::execute()
 {
-    uint8_t r = operand1;
-    uint8_t s = operand2;
-    uint8_t t = operand3;
-    mac->reg[r] = mac->reg[s] & mac->reg[t];
+	uint8_t r = operand1;
+	uint8_t s = operand2;
+	uint8_t t = operand3;
+	mac->reg[r] = mac->reg[s] & mac->reg[t];
 }
 
 void Xor::execute()
 {
-    uint8_t r = operand1;
-    uint8_t s = operand2;
-    uint8_t t = operand3;
-    mac->reg[r] = mac->reg[s] ^ mac->reg[t];
+	uint8_t r = operand1;
+	uint8_t s = operand2;
+	uint8_t t = operand3;
+	mac->reg[r] = mac->reg[s] ^ mac->reg[t];
 }
 
-void Rotate::execute() {
+void Rotate::execute()
+{
 	uint8_t r = operand1;
-	uint8_t t = operand3%8;
-	mac->reg[r] = ( ( mac->reg[r]>>t ) | ( mac->reg[r]<<( 8-t ) ) );
-
-
+	uint8_t t = operand3 % 8;
+	mac->reg[r] = ((mac->reg[r] >> t) | (mac->reg[r] << (8 - t)));
 }
 
 void Jump::execute()
@@ -175,7 +183,7 @@ void Jump::execute()
 
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
-	if(xy%2!=0)
+	if (xy % 2 != 0) // Not a full instruction at `xy`.
 		xy--;
 	if (mac->reg[r] == mac->reg[0])
 		mac->reg.pc = xy;
@@ -184,4 +192,62 @@ void Jump::execute()
 void Halt::execute()
 {
 	mac->shouldHalt = true;
+}
+
+ControlUnit::~ControlUnit() {}
+Load1::~Load1() {}
+Load2::~Load2() {}
+Store::~Store() {}
+Move::~Move() {}
+Add1::~Add1() {}
+Add2::~Add2() {}
+Or::~Or() {}
+And::~And() {}
+Xor::~Xor() {}
+Rotate::~Rotate() {}
+Jump::~Jump() {}
+Halt::~Halt() {}
+
+float decodeFloat(uint8_t val)
+{
+	bool sign;	  // 1 bit
+	int exponent; // 3 bits
+	int mantissa; // 4 bits
+
+	sign = (val >> 7) & 0x1;
+	exponent = (val >> 4) & 0x7;
+	mantissa = val & 0xF;
+
+	float mantissa_value =
+		1.0f + (mantissa / 16.0f);		 // Normalizing the mantissa
+	float exponent_value = exponent - 4; // Adjusting with bias
+	float result = mantissa_value * std::pow(2, exponent_value);
+	return sign ? -result : result;
+}
+
+uint8_t encodeFloat(float val)
+{
+	bool sign;	  // 1 bit
+	int exponent; // 3 bits
+	int mantissa; // 4 bits
+
+	if (val < 0) {
+		sign = 1;
+		val = -val;
+	}
+
+	exponent = 0;
+	while (val >= 1.0f) {
+		val /= 2.0f;
+		exponent++;
+	}
+	while (val < 0.5f) {
+		val *= 2.0f;
+		exponent--;
+	}
+
+	exponent = exponent + 4; // Apply bias
+	mantissa = static_cast<int>(val * 16) & 0xF;
+
+	return (sign << 7) | (exponent << 4) | (mantissa);
 }
