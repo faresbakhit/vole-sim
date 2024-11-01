@@ -4,3 +4,5 @@
 -Iimgui/backends
 -Iimgui/misc/freetype
 -Iglfw/include
+-Iimgui/examples/libs/emscripten
+-Imisc/fonts

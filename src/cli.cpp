@@ -126,6 +126,8 @@ int main()
 		<< ">> - mem set X Y: Set memory cell X to the value Y.\n"
 		<< ">> - pc get: Get the value of the program counter.\n"
 		<< ">> - pc set X: Set the program counter to the value X.\n"
+		<< ">> - reset cpu: Reset all registers to zero.\n"
+		<< ">> - reset ram: Reset all memory cells to zero.\n"
 		<< ">> - exit: Exit the machine simulator.\n";
 
 	vole::Machine mac;
@@ -144,11 +146,11 @@ int main()
 			argstr >> arg;
 			if (arg == "load") {
 				argstr >> arg;
-				mac.loadProgram(arg);
+				mac.LoadProgram(arg);
 			} else if (arg == "run") {
-				mac.run();
+				mac.Run();
 			} else if (arg == "step") {
-				mac.step();
+				mac.Step();
 			} else if (arg == "reg") {
 				argstr >> arg;
 				if (arg == "show") {
@@ -174,12 +176,17 @@ int main()
 			} else if (arg == "pc") {
 				argstr >> arg;
 				if (arg == "get") {
-					std::cout << "PC: " << std::hex << std::uppercase
-							  << std::setfill('0') << std::setw(2)
-							  << (int)mac.reg.pc << "\n";
+					std::cout << "PC: " << hex() << (int)mac.reg.pc << "\n";
 				} else if (arg == "set") {
 					int newPC = inNumber(argstr, base::hex, 0, 0xFF);
 					mac.reg.pc = newPC;
+				}
+			} else if (arg == "reset") {
+				argstr >> arg;
+				if (arg == "cpu") {
+					mac.reg.Reset();
+				} else if (arg == "ram") {
+					mac.mem.Reset();
 				}
 			} else if (arg == "exit") {
 				break;
@@ -190,6 +197,7 @@ int main()
 			continue;
 		}
 	} while (1);
+
 	std::cerr << ">> I think therefore I am!\n";
 	std::cerr << ">> Moriturus te saluto.!\n";
 }

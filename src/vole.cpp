@@ -1,23 +1,47 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 #include "vole.h"
 
 using namespace vole;
 
-Machine::Machine(std::ostream &logStream) : log(logStream) {}
+const std::function<ControlUnit *(Machine *)>
+	controlUnitFactory[]{
+		[](Machine *mac) { return new Load1(mac); },
+		[](Machine *mac) { return new Load2(mac); },
+		[](Machine *mac) { return new Store(mac); },
+		[](Machine *mac) { return new Move(mac); },
+		[](Machine *mac) { return new Add1(mac); },
+		[](Machine *mac) { return new Add2(mac); },
+		[](Machine *mac) { return new Or(mac); },
+		[](Machine *mac) { return new And(mac); },
+		[](Machine *mac) { return new Xor(mac); },
+		[](Machine *mac) { return new Rotate(mac); },
+		[](Machine *mac) { return new Jump(mac); },
+		[](Machine *mac) { return new Halt(mac); },
+	};
 
-bool Machine::loadProgram(const std::string &path, uint8_t addr)
+#define OS_HEX1 std::hex << std::uppercase
+#define OS_HEX2 std::hex << std::uppercase << std::setfill('0') << std::setw(2)
+
+Machine::Machine(std::ostream &logStream, const std::array<ControlUnitBuilder, 16> cuFactory) : log(logStream), controlUnitFactory(cuFactory) {}
+
+Machine::Machine(const std::array<ControlUnitBuilder, 16> cuFactory) : log(std::cerr), controlUnitFactory(cuFactory) {}
+
+bool Machine::LoadProgram(const std::string &path, uint8_t addr)
 {
 	std::ifstream ifs(path);
 	if (ifs.fail()) {
+		log << "Loading program failed.\n";
 		return false;
 	}
-	return loadProgram(ifs, addr);
+	return LoadProgram(ifs, addr);
 }
 
-bool Machine::loadProgram(std::istream &stream, uint8_t addr)
+bool Machine::LoadProgram(std::istream &stream, uint8_t addr)
 {
 	uint16_t inst;
 	for (size_t i = addr; !stream.eof(); i += 2) {
@@ -36,22 +60,30 @@ bool Machine::loadProgram(std::istream &stream, uint8_t addr)
 	return true;
 }
 
-void Machine::run()
+void Machine::Reset()
 {
-	shouldHalt = false;
-	reg.pc = 0;
-	while (!shouldHalt)
-		step();
+	reg.Reset(); // CPU
+	mem.Reset(); // RAM
 }
 
-void Machine::step()
+void Machine::Run()
 {
-	ControlUnit *cu = ControlUnit::decode(this);
-	cu->execute();
+	do {} while (Step() != ShouldHalt::YES);
+}
+
+ShouldHalt Machine::Step()
+{
+	ControlUnit *cu = ControlUnit::Decode(this);
+	ShouldHalt shouldHalt = cu->Execute();
 	delete cu;
+	return shouldHalt;
 }
 
 Memory::Memory() : m_Array() {}
+
+void Memory::Reset() {
+	m_Array.fill(0);
+}
 
 uint8_t &Memory::operator[](uint8_t idx)
 {
@@ -65,6 +97,10 @@ uint8_t Memory::operator[](uint8_t idx) const
 
 Registers::Registers() : pc(0), m_Array() {}
 
+void Registers::Reset() {
+	m_Array.fill(0);
+}
+
 uint8_t &Registers::operator[](uint8_t i)
 {
 	return m_Array[i];
@@ -75,110 +111,193 @@ uint8_t Registers::operator[](uint8_t i) const
 	return m_Array[i];
 }
 
-ControlUnit::ControlUnit(Machine *machine) : mac(machine)
+ControlUnit::ControlUnit(Machine *machine) : ControlUnit(machine, machine->reg.pc)
 {
-	inst = mac->mem[mac->reg.pc];
-	inst = (inst << 8) | mac->mem[mac->reg.pc + 1];
+}
+
+ControlUnit::ControlUnit(Machine *machine, uint8_t at) : mac(machine)
+{
+	inst = mac->mem[at];
+	inst = (inst << 8) | mac->mem[at + 1];
 	opcode = inst >> 12;
 	operand1 = (inst >> 8) & 0x0F;
 	operand2 = (inst >> 4) & 0x00F;
 	operand3 = inst & 0x000F;
 	operandXY = inst & 0x00FF;
-	mac->reg.pc += 2;
 }
 
-ControlUnit *ControlUnit::decode(Machine *mac)
+ControlUnit *ControlUnit::Decode(Machine *mac)
 {
-	uint8_t opcode = mac->mem[mac->reg.pc] >> 4;
-	if (opcode < 1 || opcode > 12) {
-		mac->log << "Op-code not in range [1-12]: " << +opcode
-				 << ". Halting.\n";
-		return new Halt(mac);
-	}
-	auto newControlUnit = controlUnitFactory[opcode - 1];
-	return newControlUnit(mac);
+	auto cu = ControlUnit::Decode(mac, mac->reg.pc);
+	mac->reg.pc += 2;
+	return cu;
 }
 
-void Load1::execute()
+ControlUnit *ControlUnit::Decode(Machine *mac, uint8_t at)
+{
+	uint8_t opcode = mac->mem[at] >> 4;
+	auto controlUnitBuilder = mac->controlUnitFactory[opcode];
+	auto cu = controlUnitBuilder(mac, at);
+	return cu;
+}
+
+ShouldHalt Nothing::Execute()
+{
+	return ShouldHalt::NO;
+}
+
+std::string Nothing::Humanize() {
+	std::ostringstream os;
+	return os.str();
+}
+
+ShouldHalt Load1::Execute()
 {
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
 	mac->reg[r] = mac->mem[xy];
+	return ShouldHalt::NO;
 }
 
-void Load2::execute()
+std::string Load1::Humanize() {
+	std::ostringstream os;
+	os << "Copy bits at cell " << OS_HEX2 << operandXY << " to register " << OS_HEX1 << operand1;
+	return os.str();
+}
+
+ShouldHalt Load2::Execute()
 {
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
 	mac->reg[r] = xy;
+	return ShouldHalt::NO;
 }
 
-void Store::execute()
+std::string Load2::Humanize() {
+	std::ostringstream os;
+	os << "Copy bit-string " << OS_HEX2 << operandXY << " to register " << OS_HEX1 << operand1;
+	return os.str();
+}
+
+ShouldHalt Store::Execute()
 {
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
-	mac->reg[xy] = mac->mem[r];
+	mac->mem[xy] = mac->reg[r];
+	return ShouldHalt::NO;
 }
 
-void Move::execute()
+std::string Store::Humanize() {
+	std::ostringstream os;
+	os << "Copy bits in register " << OS_HEX1 << operand1 << " to cell " << OS_HEX2 << operandXY;
+	return os.str();
+}
+
+ShouldHalt Move::Execute()
 {
 	uint8_t r = operand2;
 	uint8_t s = operand3;
 	mac->reg[s] = mac->reg[r];
+	return ShouldHalt::NO;
 }
 
-void Add1::execute()
+std::string Move::Humanize() {
+	std::ostringstream os;
+	os << "Copy bits in register " << OS_HEX1 << operand2 << " to register " << OS_HEX1 << operand3;
+	return os.str();
+}
+
+ShouldHalt Add1::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
 	mac->reg[r] = mac->reg[s] + mac->reg[t];
+	return ShouldHalt::NO;
 }
 
-float decodeFloat(uint8_t val);
-uint8_t encodeFloat(float val);
+std::string Add1::Humanize() {
+	std::ostringstream os;
+	os << "Add bits in registers " << OS_HEX1 << operand1 << " and " << OS_HEX1 << operand2 << " (two's-complement), put in " << OS_HEX1 << operand3;
+	return os.str();
+}
 
-void Add2::execute()
+ShouldHalt Add2::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
 	mac->reg[r] =
-		encodeFloat(decodeFloat(mac->reg[s]) + decodeFloat(mac->reg[t]));
+		Float::Encode(Float::Decode(mac->reg[s]) + Float::Decode(mac->reg[t]));
+	return ShouldHalt::NO;
 }
 
-void Or::execute()
+std::string Add2::Humanize() {
+	std::ostringstream os; 
+	os << "Add bits in register " << OS_HEX1 << operand1 << " and " << OS_HEX1 << operand2 << " (float), put in " << OS_HEX1 << operand3;
+	return os.str();
+}
+
+ShouldHalt Or::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
 	mac->reg[r] = mac->reg[s] | mac->reg[t];
+	return ShouldHalt::NO;
 }
 
-void And::execute()
+std::string Or::Humanize() {
+	std::ostringstream os;
+	os << "Bitwise OR bits in register " << OS_HEX1 << operand1 << " and " << OS_HEX1 << operand2 << ", put in " << OS_HEX1 << operand3;
+	return os.str();
+}
+
+ShouldHalt And::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
 	mac->reg[r] = mac->reg[s] & mac->reg[t];
+	return ShouldHalt::NO;
 }
 
-void Xor::execute()
+std::string And::Humanize() {
+	std::ostringstream os;
+	os << "Bitwise AND bits in register " << OS_HEX1 << operand1 << " and " << OS_HEX1 << operand2 << ", put in " << OS_HEX1 << operand3;
+	return os.str();
+}
+
+ShouldHalt Xor::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t s = operand2;
 	uint8_t t = operand3;
 	mac->reg[r] = mac->reg[s] ^ mac->reg[t];
+	return ShouldHalt::NO;
 }
 
-void Rotate::execute()
+std::string Xor::Humanize() {
+	std::ostringstream os;
+	os << "Bitwise XOR bits in register " << OS_HEX1 << operand1 << " and " << OS_HEX1 << operand2 << ", put in " << OS_HEX1 << operand3;
+	return os.str();
+}
+
+ShouldHalt Rotate::Execute()
 {
 	uint8_t r = operand1;
 	uint8_t t = operand3 % 8;
 	mac->reg[r] = ((mac->reg[r] >> t) | (mac->reg[r] << (8 - t)));
+	return ShouldHalt::NO;
 }
 
-void Jump::execute()
+std::string Rotate::Humanize() {
+	std::ostringstream os;
+	os << "Rotate bits in register " << OS_HEX1 << operand1 << " cyclically right " << OS_HEX1 << operand3 << " steps";
+	return os.str();
+}
+
+ShouldHalt Jump::Execute()
 {
 
 	uint8_t r = operand1;
@@ -187,28 +306,54 @@ void Jump::execute()
 		xy--;
 	if (mac->reg[r] == mac->reg[0])
 		mac->reg.pc = xy;
+	return ShouldHalt::NO;
 }
 
-void Halt::execute()
+std::string Jump::Humanize() {
+	std::ostringstream os;
+	os << "Jump to cell " << OS_HEX2 << operandXY << " if register " << OS_HEX1 << operand1 << " equals register 0";
+	return os.str();
+}
+
+ShouldHalt Halt::Execute()
 {
-	mac->shouldHalt = true;
+	return ShouldHalt::YES;
 }
 
-ControlUnit::~ControlUnit() {}
-Load1::~Load1() {}
-Load2::~Load2() {}
-Store::~Store() {}
-Move::~Move() {}
-Add1::~Add1() {}
-Add2::~Add2() {}
-Or::~Or() {}
-And::~And() {}
-Xor::~Xor() {}
-Rotate::~Rotate() {}
-Jump::~Jump() {}
-Halt::~Halt() {}
+std::string Halt::Humanize() {
+	std::ostringstream os;
+	os << "Halt";
+	return os.str();
+}
 
-float decodeFloat(uint8_t val)
+ShouldHalt Unused::Execute() {
+	mac->log << "Unspecified op-code " << opcode << " used. Halting.\n";
+	return ShouldHalt::YES;
+}
+
+std::string Unused::Humanize() {
+	std::ostringstream os;
+	os << "Unspecified op-code " << OS_HEX1 << opcode;
+	return os.str();
+}
+
+ControlUnit::~ControlUnit() = default;
+Nothing::~Nothing() = default;
+Load1::~Load1() = default;
+Load2::~Load2() = default;
+Store::~Store() = default;
+Move::~Move() = default;
+Add1::~Add1() = default;
+Add2::~Add2() = default;
+Or::~Or() = default;
+And::~And() = default;
+Xor::~Xor() = default;
+Rotate::~Rotate() = default;
+Jump::~Jump() = default;
+Halt::~Halt() = default;
+Unused::~Unused() = default;
+
+float Float::Decode(uint8_t val)
 {
 	bool sign;	  // 1 bit
 	int exponent; // 3 bits
@@ -218,14 +363,13 @@ float decodeFloat(uint8_t val)
 	exponent = (val >> 4) & 0x7;
 	mantissa = val & 0xF;
 
-	float mantissa_value =
-		1.0f + (mantissa / 16.0f);		 // Normalizing the mantissa
+	float mantissa_value = mantissa / 16.f; // Normalizing the mantissa
 	float exponent_value = exponent - 4; // Adjusting with bias
 	float result = mantissa_value * std::pow(2, exponent_value);
 	return sign ? -result : result;
 }
 
-uint8_t encodeFloat(float val)
+uint8_t Float::Encode(float val)
 {
 	bool sign;	  // 1 bit
 	int exponent; // 3 bits

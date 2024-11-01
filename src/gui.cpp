@@ -1,252 +1,464 @@
-// Dear ImGui: standalone example application for GLFW + OpenGL 3, using
-// programmable pipeline (GLFW is a cross-platform general purpose library for
-// handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation,
-// etc.)
-
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/
-// folder).
-// - Introduction, links and more at the top of imgui.cpp
-
 #include "imgui.h"
-#include "imgui_impl_glfw.h"
+#include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
-#define GL_SILENCE_DEPRECATION
+#include <SDL2/SDL.h>
 #if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <GLES2/gl2.h>
+#include <SDL2/SDL_opengles2.h>
+#else
+#include <SDL2/SDL_opengl.h>
 #endif
-#include "GLFW/glfw3.h"
+#include <sstream>
+#include <bitset>
 
-// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to
-// maximize ease of testing and compatibility with old VS compilers. To link
-// with VS2010-era libraries, VS2015+ requires linking with
-// legacy_stdio_definitions.lib, which we do using this pragma. Your own project
-// should not be affected, as you are likely to link with a newer binary of GLFW
-// that is adequate for your version of Visual Studio.
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) &&                                 \
-	!defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-// This example can also compile and run with Emscripten! See
-// 'Makefile.emscripten' for details.
 #ifdef __EMSCRIPTEN__
-#include "../libs/emscripten/emscripten_mainloop_stub.h"
+#include "../emscripten/emscripten_mainloop_stub.h"
 #endif
 
-static void glfw_error_callback(int error, const char *description)
-{
-	fprintf(stderr, "GLFW Error %d: %s\n", error, description);
-}
+#include "../misc/fonts/font_source_code_pro.h"
+#include "vole.h"
+
+#define OS_HEX1 std::hex << std::uppercase
+
+static ImVector<ImVec2> canvasPoints;
+
+class CanvasDraw : public vole::ControlUnit::ControlUnit {
+	using vole::ControlUnit::ControlUnit;
+	vole::ShouldHalt Execute() override {
+		canvasPoints.push_back({
+			static_cast<float>(mac->mem[operandXY]),
+			static_cast<float>(mac->mem[operandXY + 1])
+		});
+		return vole::ShouldHalt::NO;
+	};
+	std::string Humanize() override {
+		std::ostringstream os;
+		os << "Draw the point in cell " << OS_HEX1 << operandXY;
+		return os.str();
+	};
+	~CanvasDraw() = default;
+};
+
+inline static std::array<vole::ControlUnitBuilder, 16> ExtendedControlUnitFactory = {
+	vole::NothingBuilder,
+	[](vole::Machine *mac, uint8_t at) { return new vole::Load1(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Load2(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Store(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Move(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Add1(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Add2(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Or(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::And(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Xor(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Rotate(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Jump(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new vole::Halt(mac, at); },
+	[](vole::Machine *mac, uint8_t at) { return new CanvasDraw(mac, at); },
+	vole::UnusedBuilder,
+	vole::UnusedBuilder,
+};
 
 // Main code
-int main(int, char **)
+int main(int, char**)
 {
-	glfwSetErrorCallback(glfw_error_callback);
-	if (!glfwInit())
-		return 1;
+    // Setup SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
+    {
+        printf("Error: %s\n", SDL_GetError());
+        return -1;
+    }
 
-		// Decide GL+GLSL versions
+    // Decide GL+GLSL versions
 #if defined(IMGUI_IMPL_OPENGL_ES2)
-	// GL ES 2.0 + GLSL 100
-	const char *glsl_version = "#version 100";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    // GL ES 2.0 + GLSL 100
+    const char* glsl_version = "#version 100";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #elif defined(__APPLE__)
-	// GL 3.2 + GLSL 150
-	const char *glsl_version = "#version 150";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // Required on Mac
+    // GL 3.2 Core + GLSL 150
+    const char* glsl_version = "#version 150";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 #else
-	// GL 3.0 + GLSL 130
-	const char *glsl_version = "#version 130";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-	// glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+
-	// only glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // 3.0+ only
+    // GL 3.0 + GLSL 130
+    const char* glsl_version = "#version 130";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
 
-	// Create window with graphics context
-	GLFWwindow *window = glfwCreateWindow(
-		1280, 720, "Dear ImGui GLFW+OpenGL3 example", nullptr, nullptr);
-	if (window == nullptr)
-		return 1;
-	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1); // Enable vsync
-
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO &io = ImGui::GetIO();
-	(void)io;
-	io.ConfigFlags |=
-		ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-	io.ConfigFlags |=
-		ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
-	io.IniFilename = NULL;
-
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// ImGui::StyleColorsLight();
-
-	// Setup Platform/Renderer backends
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-#ifdef __EMSCRIPTEN__
-	ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
+    // From 2.0.18: Enable native IME.
+#ifdef SDL_HINT_IME_SHOW_UI
+    SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 #endif
-	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	// Load Fonts
-	// - If no fonts are loaded, dear imgui will use the default font. You can
-	// also load multiple fonts and use ImGui::PushFont()/PopFont() to select
-	// them.
-	// - AddFontFromFileTTF() will return the ImFont* so you can store it if you
-	// need to select the font among multiple.
-	// - If the file cannot be loaded, the function will return a nullptr.
-	// Please handle those errors in your application (e.g. use an assertion, or
-	// display an error and quit).
-	// - The fonts will be rasterized at a given size (w/ oversampling) and
-	// stored into a texture when calling
-	// ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame
-	// below will call.
-	// - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use
-	// Freetype for higher quality font rendering.
-	// - Read 'docs/FONTS.md' for more instructions and details.
-	// - Remember that in C/C++ if you want to include a backslash \ in a string
-	// literal you need to write a double backslash \\ !
-	// - Our Emscripten build process allows embedding fonts to be accessible at
-	// runtime from the "fonts/" folder. See Makefile.emscripten for details.
-	// io.Fonts->AddFontDefault();
-	// io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
-	// io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-	// io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-	// io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-	// ImFont* font =
-	// io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f,
-	// nullptr, io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != nullptr);
+    // Create window with graphics context
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    if (window == nullptr)
+    {
+        printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
+        return -1;
+    }
 
-	// Our state
-	bool show_demo_window = true;
-	bool show_another_window = false;
-	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, gl_context);
+    SDL_GL_SetSwapInterval(1); // Enable vsync
 
-	// Main loop
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.IniFilename = nullptr;
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    // Load Fonts
+		io.Fonts->AddFontFromMemoryCompressedTTF(font_source_code_pro_compressed_data, font_source_code_pro_compressed_size, 21.0f);
+		io.Fonts->AddFontDefault();
+
+    // Our state
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+		vole::Machine mac = vole::Machine(ExtendedControlUnitFactory);
+		int speed = 5;
+		bool isRunning = false;
+		unsigned int currentTime, lastTime = 0;
+
+		mac.mem[0] = 0xD0; mac.mem[1] = 0xCC;
+		mac.mem[2] = 0xD0; mac.mem[3] = 0xCE;
+		mac.mem[4] = 0xD0; mac.mem[5] = 0xCC;
+		mac.mem[6] = 0xD0; mac.mem[7] = 0xD0;
+		mac.mem[8] = 0xD0; mac.mem[9] = 0xD2;
+		mac.mem[10] = 0xD0; mac.mem[11] = 0xD4;
+		mac.mem[12] = 0xD0; mac.mem[13] = 0xD6;
+		mac.mem[14] = 0xD0; mac.mem[15] = 0xD8;
+		mac.mem[16] = 0xD0; mac.mem[17] = 0xD8;
+		mac.mem[18] = 0xD0; mac.mem[19] = 0xDA;
+		mac.mem[20] = 0xD0; mac.mem[21] = 0xDC;
+		mac.mem[22] = 0xD0; mac.mem[23] = 0xDE;
+		mac.mem[24] = 0xD0; mac.mem[25] = 0xDE;
+		mac.mem[26] = 0xD0; mac.mem[27] = 0xE0;
+		mac.mem[28] = 0xD0; mac.mem[29] = 0xE0;
+		mac.mem[30] = 0xD0; mac.mem[31] = 0xE2;
+		mac.mem[32] = 0xD0; mac.mem[33] = 0xE2;
+		mac.mem[34] = 0xD0; mac.mem[35] = 0xE4;
+		mac.mem[36] = 0xD0; mac.mem[37] = 0xE6;
+		mac.mem[38] = 0xD0; mac.mem[39] = 0xE8;
+		mac.mem[40] = 0xD0; mac.mem[41] = 0xEA;
+		mac.mem[42] = 0xD0; mac.mem[43] = 0xEC;
+		mac.mem[44] = 0xD0; mac.mem[45] = 0xEA;
+		mac.mem[46] = 0xD0; mac.mem[47] = 0xEE;
+		mac.mem[48] = 0xD0; mac.mem[49] = 0xF0;
+		mac.mem[50] = 0xD0; mac.mem[51] = 0xF2;
+		mac.mem[52] = 0xD0; mac.mem[53] = 0xF4;
+		mac.mem[54] = 0xD0; mac.mem[55] = 0xF6;
+		mac.mem[56] = 0xD0; mac.mem[57] = 0xF8;
+		mac.mem[58] = 0xD0; mac.mem[59] = 0xFA;
+		mac.mem[60] = 0xD0; mac.mem[61] = 0xFA;
+		mac.mem[62] = 0xD0; mac.mem[63] = 0xFC;
+		mac.mem[64] = 0xD0; mac.mem[65] = 0xFC;
+		mac.mem[66] = 0xD0; mac.mem[67] = 0xFE;
+		mac.mem[68] = 0xC0; mac.mem[70] = 0x00;
+
+		mac.mem[0xCC] = 10; mac.mem[0xCD] = 10;
+		mac.mem[0xCE] = 10; mac.mem[0xCF] = 50;
+		mac.mem[0xD0] = 25; mac.mem[0xD1] = 10;
+		mac.mem[0xD2] = 10; mac.mem[0xD3] = 25;
+		mac.mem[0xD4] = 22; mac.mem[0xD5] = 25;
+		mac.mem[0xD6] = 30; mac.mem[0xD7] = 50;
+		mac.mem[0xD8] = 40; mac.mem[0xD9] = 10;
+		mac.mem[0xDA] = 50; mac.mem[0xDB] = 50;
+		mac.mem[0xDC] = 60; mac.mem[0xDD] = 50;
+		mac.mem[0xDE] = 60; mac.mem[0xDF] = 10;
+		mac.mem[0xE0] = 75; mac.mem[0xE1] = 25;
+		mac.mem[0xE2] = 60; mac.mem[0xE3] = 30;
+		mac.mem[0xE4] = 75; mac.mem[0xE5] = 50;
+		mac.mem[0xE6] = 33; mac.mem[0xE7] = 25;
+		mac.mem[0xE8] = 49; mac.mem[0xE9] = 25;
+		mac.mem[0xEA] = 85; mac.mem[0xEB] = 10;
+		mac.mem[0xEC] = 85; mac.mem[0xED] = 50;
+		mac.mem[0xEE] = 105; mac.mem[0xEF] = 10;
+		mac.mem[0xF0] = 85; mac.mem[0xF1] = 48;
+		mac.mem[0xF2] = 105; mac.mem[0xF3] = 48;
+		mac.mem[0xF4] = 85; mac.mem[0xF5] = 30;
+		mac.mem[0xF6] = 100; mac.mem[0xF7] = 30;
+		mac.mem[0xF8] = 115; mac.mem[0xF9] = 50;
+		mac.mem[0xFA] = 134; mac.mem[0xFB] = 30;
+		mac.mem[0xFC] = 114; mac.mem[0xFD] = 36;
+		mac.mem[0xFE] = 134; mac.mem[0xFF] = 10;
+
+    // Main loop
+    bool done = false;
 #ifdef __EMSCRIPTEN__
-	// For an Emscripten build we are disabling file-system access, so let's not
-	// attempt to do a fopen() of the imgui.ini file. You may manually call
-	// LoadIniSettingsFromMemory() to load settings from your own storage.
-	io.IniFilename = nullptr;
-	EMSCRIPTEN_MAINLOOP_BEGIN
+    // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
+    // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
+    EMSCRIPTEN_MAINLOOP_BEGIN
 #else
-	while (!glfwWindowShouldClose(window))
+    while (!done)
 #endif
-	{
-		// Poll and handle events (inputs, window resize, etc.)
-		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-		// tell if dear imgui wants to use your inputs.
-		// - When io.WantCaptureMouse is true, do not dispatch mouse input data
-		// to your main application, or clear/overwrite your copy of the mouse
-		// data.
-		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-		// data to your main application, or clear/overwrite your copy of the
-		// keyboard data. Generally you may always pass all inputs to dear
-		// imgui, and hide them from your application based on those two flags.
-		glfwPollEvents();
-		if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
-			ImGui_ImplGlfw_Sleep(10);
-			continue;
-		}
+    {
+        // Poll and handle events (inputs, window resize, etc.)
+        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT)
+                done = true;
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+                done = true;
+        }
+        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
+        {
+            SDL_Delay(10);
+            continue;
+        }
 
-		// Start the Dear ImGui frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+        // Start the Dear ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
 
-		// 1. Show the big demo window (Most of the sample code is in
-		// ImGui::ShowDemoWindow()! You can browse its code to learn more about
-		// Dear ImGui!).
-		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
+				currentTime = SDL_GetTicks();
+				if (isRunning && (currentTime > lastTime + 1000/speed)) {
+					if (mac.Step() == vole::ShouldHalt::YES) {
+						isRunning = false;
+					};
+					lastTime = currentTime;
+				}
 
-		// 2. Show a simple window that we create ourselves. We use a Begin/End
-		// pair to create a named window.
-		{
-			static float f = 0.0f;
-			static int counter = 0;
+				ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				ImGui::SetNextWindowPos({io.DisplaySize.x * 1.f / 3.f, 0});
+				if (ImGui::Begin("Control", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+				{
+					ImGui::InputScalar("Program Counter", ImGuiDataType_U8, &mac.reg.pc, NULL, NULL, "%02X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
+					ImGui::SeparatorText("Execution");
+					if (ImGui::Button("Run until HALT", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
+						isRunning = true;
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Run one instruction", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
+						mac.Step();
+					}
+					ImGui::SeparatorText("Speed");
+					ImGui::Text("Specify number of instructions per second (IPS):");
+					ImGui::VSliderInt("IPS", {50.f, 240}, &speed, 1, 100, "%d", ImGuiSliderFlags_ClampOnInput);
+					ImGui::End();
+				}
 
-			ImGui::Begin("Hello, world!"); // Create a window called "Hello,
-										   // world!" and append into it.
+				ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				ImGui::SetNextWindowPos({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				if (ImGui::Begin("Canvas", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+				{
+          static ImVec2 scrolling(0.0f, 0.0f);
 
-			ImGui::Text(
-				"This is some useful text."); // Display some text (you can use
-											  // a format strings too)
-			ImGui::Checkbox("Demo Window",
-							&show_demo_window); // Edit bools storing our window
-												// open/close state
-			ImGui::Checkbox("Another Window", &show_another_window);
+          // Using InvisibleButton() as a convenience 1) it will advance the layout cursor and 2) allows us to use IsItemHovered()/IsItemActive()
+          ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();      // ImDrawList API uses screen coordinates!
+          ImVec2 canvas_sz = ImGui::GetContentRegionAvail();   // Resize canvas to what's available
+          if (canvas_sz.x < 50.0f) canvas_sz.x = 50.0f;
+          if (canvas_sz.y < 50.0f) canvas_sz.y = 50.0f;
+          ImVec2 canvas_p1 = ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y);
 
-			ImGui::SliderFloat(
-				"float", &f, 0.0f,
-				1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
-			ImGui::ColorEdit3(
-				"clear color",
-				(float *)&clear_color); // Edit 3 floats representing a color
+          // Draw border and background color
+          ImGuiIO& io = ImGui::GetIO();
+          ImDrawList* draw_list = ImGui::GetWindowDrawList();
+          draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255));
+          draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));
 
-			if (ImGui::Button(
-					"Button")) // Buttons return true when clicked (most widgets
-							   // return true when edited/activated)
-				counter++;
-			ImGui::SameLine();
-			ImGui::Text("counter = %d", counter);
+          // This will catch our interactions
+          const ImVec2 origin(canvas_p0.x + scrolling.x, canvas_p0.y + scrolling.y); // Lock scrolled origin
+          const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x, io.MousePos.y - origin.y);
 
-			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-						1000.0f / io.Framerate, io.Framerate);
-			ImGui::End();
-		}
+          // Context menu (under default mouse threshold)
+          ImVec2 drag_delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+          if (drag_delta.x == 0.0f && drag_delta.y == 0.0f)
+              ImGui::OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight);
+          if (ImGui::BeginPopup("context"))
+          {
+            if (ImGui::MenuItem("Remove one", NULL, false, canvasPoints.Size > 0)) { canvasPoints.resize(canvasPoints.size() - 2); }
+            if (ImGui::MenuItem("Remove all", NULL, false, canvasPoints.Size > 0)) { canvasPoints.clear(); }
+            ImGui::EndPopup();
+          }
 
-		// 3. Show another simple window.
-		if (show_another_window) {
-			ImGui::Begin(
-				"Another Window",
-				&show_another_window); // Pass a pointer to our bool variable
-									   // (the window will have a closing button
-									   // that will clear the bool when clicked)
-			ImGui::Text("Hello from another window!");
-			if (ImGui::Button("Close Me"))
-				show_another_window = false;
-			ImGui::End();
-		}
+          // Draw grid + all lines in the canvas
+          draw_list->PushClipRect(canvas_p0, canvas_p1, true);
+          const float GRID_STEP = 64.0f;
+          for (float x = fmodf(scrolling.x, GRID_STEP); x < canvas_sz.x; x += GRID_STEP)
+              draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y), ImVec2(canvas_p0.x + x, canvas_p1.y), IM_COL32(200, 200, 200, 40));
+          for (float y = fmodf(scrolling.y, GRID_STEP); y < canvas_sz.y; y += GRID_STEP)
+              draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y), ImVec2(canvas_p1.x, canvas_p0.y + y), IM_COL32(200, 200, 200, 40));
+          for (int n = 0; n < canvasPoints.Size - (canvasPoints.Size % 2); n += 2)
+              draw_list->AddLine(ImVec2(origin.x + canvasPoints[n].x, origin.y + canvasPoints[n].y), ImVec2(origin.x + canvasPoints[n + 1].x, origin.y + canvasPoints[n + 1].y), IM_COL32(255, 255, 0, 255), 2.0f);
+          draw_list->PopClipRect();
 
-		// Rendering
-		ImGui::Render();
-		int display_w, display_h;
-		glfwGetFramebufferSize(window, &display_w, &display_h);
-		glViewport(0, 0, display_w, display_h);
-		glClearColor(clear_color.x * clear_color.w,
-					 clear_color.y * clear_color.w,
-					 clear_color.z * clear_color.w, clear_color.w);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+          ImGui::End();
+				}
+      
+				ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y});
+				ImGui::SetNextWindowPos({0, 0});
+				if (ImGui::Begin("Instruction Editor", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+				{
+			    if (ImGui::BeginTable("##Instruction", 4, ImGuiTableFlags_RowBg))
+			    {
+            ImGui::TableSetupColumn("Low Byte", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Instruction", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("High Byte", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Note", ImGuiTableColumnFlags_WidthStretch);
 
-		glfwSwapBuffers(window);
-	}
+		        for (size_t row = 0; row < (vole::Memory::SIZE >> 1); row++) {
+		          ImGui::TableNextRow();
+		          ImGui::TableSetColumnIndex(0);
+							ImGui::TextDisabled("%02zX", 2*row);
+		          ImGui::TableSetColumnIndex(1);
+							ImGui::PushID(row);
+							ImGui::PushItemWidth(60);
+		          ImGui::InputScalarN("##", ImGuiDataType_U8, &mac.mem[2*row], 2, NULL, NULL, "%02X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll);
+							ImGui::PopItemWidth();
+							ImGui::PopID();
+		          ImGui::TableSetColumnIndex(2);
+							ImGui::TextDisabled("%02zX", 2*row+1);
+		          ImGui::TableSetColumnIndex(3);
+		          auto cu = vole::ControlUnit::Decode(&mac, 2*row);
+		          ImGui::TextUnformatted(cu->Humanize().c_str());
+		          if (row == mac.reg.pc >> 1) {
+			        	ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(39, 73, 114, 255));
+			        	ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(39, 73, 114, 255));
+		          }
+						}
+
+		        ImGui::EndTable();
+					}
+					ImGui::End();
+				}
+
+				ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				ImGui::SetNextWindowPos({io.DisplaySize.x * 2.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				if (ImGui::Begin("Main Memory", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+				{
+		      ImGui::BeginChild("Memory Table", {0, io.DisplaySize.y * 1.f / 2.f - 100}, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+			    if (ImGui::BeginTable("##Memory", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV))
+			    {
+		        ImGui::TableSetupColumn("Address");
+		        ImGui::TableSetupColumn("Hex");
+		        ImGui::TableSetupColumn("Bin");
+		        ImGui::TableSetupColumn("Float");
+		        ImGui::TableHeadersRow();
+
+		        for (size_t row = 0; row < vole::Memory::SIZE; row++)
+		        {
+		          ImGui::TableNextRow();
+
+		          ImGui::TableSetColumnIndex(0);
+		          ImGui::Text("%02zX", row);
+
+		          ImGui::TableSetColumnIndex(1);
+		          ImGui::Text("%02X", mac.mem[row]);
+
+		          ImGui::TableSetColumnIndex(2);
+		          std::bitset<8> bin(mac.mem[row]);
+		          ImGui::TextUnformatted(bin.to_string().c_str());
+
+		          ImGui::TableSetColumnIndex(3);
+		          ImGui::Text("%08f", vole::Float::Decode(mac.mem[row]));
+		        }
+		        ImGui::EndTable();
+			    }
+			    ImGui::EndChild();
+			    if (ImGui::Button("Clear Memory"))
+			      ImGui::OpenPopup("Clear Memory?");
+
+			    if (ImGui::BeginPopupModal("Clear Memory?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			      ImGui::Text("Are you sure you want to reset all memory cells?");
+			      ImGui::Separator();
+			      if (ImGui::Button("OK", ImVec2(120, 0))) {
+			      	mac.mem.Reset();
+			      	ImGui::CloseCurrentPopup();
+			      }
+			      ImGui::SetItemDefaultFocus();
+			      ImGui::SameLine();
+			      if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+			      ImGui::EndPopup();
+			    }
+				}
+		  	ImGui::End();
+
+				ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
+				ImGui::SetNextWindowPos({io.DisplaySize.x * 2.f / 3.f, 0});
+				if (ImGui::Begin("Registers", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+				{
+		      ImGui::BeginChild("Registers Table", ImVec2(0, io.DisplaySize.y * 1.f / 2.f - 100), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+			    if (ImGui::BeginTable("##Registers", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV))
+			    {
+		        ImGui::TableSetupColumn("Register");
+		        ImGui::TableSetupColumn("Hex");
+		        ImGui::TableSetupColumn("Bin");
+		        ImGui::TableSetupColumn("Float");
+		        ImGui::TableHeadersRow();
+
+		        for (size_t row = 0; row < 16; row++)
+		        {
+		          ImGui::TableNextRow();
+
+		          ImGui::TableSetColumnIndex(0);
+		          ImGui::Text("%01zX", row);
+
+		          ImGui::TableSetColumnIndex(1);
+		          ImGui::Text("%02X", mac.reg[row]);
+
+		          ImGui::TableSetColumnIndex(2);
+		          std::bitset<8> bin(mac.reg[row]);
+		          ImGui::TextUnformatted(bin.to_string().c_str());
+
+		          ImGui::TableSetColumnIndex(3);
+		          ImGui::Text("%08f", vole::Float::Decode(mac.reg[row]));
+		        }
+		        ImGui::EndTable();
+			    }
+			    ImGui::EndChild();
+			    if (ImGui::Button("Clear Registers")) {
+			    	mac.reg.Reset();
+			    }
+				}
+		  	ImGui::End();
+
+        // Rendering
+        ImGui::Render();
+        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        SDL_GL_SwapWindow(window);
+    }
 #ifdef __EMSCRIPTEN__
-	EMSCRIPTEN_MAINLOOP_END;
+    EMSCRIPTEN_MAINLOOP_END;
 #endif
 
-	// Cleanup
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
 
-	glfwDestroyWindow(window);
-	glfwTerminate();
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
-	return 0;
+    return 0;
 }
