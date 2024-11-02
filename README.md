@@ -4,7 +4,9 @@
 
 **Live Demo:** https://faresbakhit.github.io/vole-sim/
 
-![](./misc/images/screenshot.png)
+![](./misc/images/screenshot1.png)
+
+Compiles & works on Linux, Windows, and the Web via WebAssembly/Emscripten.
 
 ## Building
 
