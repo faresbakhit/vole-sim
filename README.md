@@ -2,6 +2,10 @@
 
 > Vole Machine Simulator & GUI
 
+**Live Demo:** https://faresbakhit.github.io/vole-sim/
+
+![](./misc/images/screenshot.png)
+
 ## Building
 
 **Dependencies**: CMake 3.5 or later and the headers and libraries for your OS and window system. On Unix-like systems like Linux and FreeBSD you will need a few extra packages which are documented in the [GLFW docs](https://www.glfw.org/docs/latest/compile_guide.html#compile_deps_wayland).
