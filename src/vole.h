@@ -6,21 +6,20 @@
 #include <iostream>
 
 namespace vole {
-class Memory
-{
+class Memory {
 public:
 	const static size_t SIZE = 256;
 	Memory();
 	void Reset();
 	uint8_t &operator[](uint8_t);
 	uint8_t operator[](uint8_t) const;
+	std::array<uint8_t, Memory::SIZE> *Array();
 
 private:
 	std::array<uint8_t, SIZE> m_Array;
 };
 
-class Registers
-{
+class Registers {
 public:
 	uint8_t pc;
 	Registers();
@@ -36,8 +35,7 @@ class Machine;
 
 enum class ShouldHalt : bool { NO, YES };
 
-class ControlUnit
-{
+class ControlUnit {
 public:
 	ControlUnit(Machine *);
 	ControlUnit(Machine *, uint8_t at);
@@ -65,8 +63,7 @@ protected:
 	Machine *mac;
 };
 
-class Nothing: public ControlUnit
-{
+class Nothing : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -74,8 +71,7 @@ public:
 	~Nothing();
 };
 
-class Load1 : public ControlUnit
-{
+class Load1 : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -83,8 +79,7 @@ public:
 	~Load1();
 };
 
-class Load2 : public ControlUnit
-{
+class Load2 : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -92,8 +87,7 @@ public:
 	~Load2();
 };
 
-class Store : public ControlUnit
-{
+class Store : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -101,8 +95,7 @@ public:
 	~Store();
 };
 
-class Move : public ControlUnit
-{
+class Move : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -110,8 +103,7 @@ public:
 	~Move();
 };
 
-class Add1 : public ControlUnit
-{
+class Add1 : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -119,8 +111,7 @@ public:
 	~Add1();
 };
 
-class Add2 : public ControlUnit
-{
+class Add2 : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -128,8 +119,7 @@ public:
 	~Add2();
 };
 
-class Or : public ControlUnit
-{
+class Or : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -137,8 +127,7 @@ public:
 	~Or();
 };
 
-class And : public ControlUnit
-{
+class And : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -146,8 +135,7 @@ public:
 	~And();
 };
 
-class Xor : public ControlUnit
-{
+class Xor : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -155,8 +143,7 @@ public:
 	~Xor();
 };
 
-class Rotate : public ControlUnit
-{
+class Rotate : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -164,8 +151,7 @@ public:
 	~Rotate();
 };
 
-class Jump : public ControlUnit
-{
+class Jump : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -173,8 +159,7 @@ public:
 	~Jump();
 };
 
-class Halt : public ControlUnit
-{
+class Halt : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -182,8 +167,7 @@ public:
 	~Halt();
 };
 
-class Unused : public ControlUnit
-{
+class Unused : public ControlUnit {
 public:
 	using ControlUnit::ControlUnit;
 	ShouldHalt Execute() override;
@@ -192,10 +176,10 @@ public:
 };
 
 typedef std::function<ControlUnit *(Machine *, uint8_t)> ControlUnitBuilder;
-inline static const ControlUnitBuilder NothingBuilder = [](Machine *mac, uint8_t at) { return new Nothing(mac, at); };
-inline static const ControlUnitBuilder UnusedBuilder = [](Machine *mac, uint8_t at) { return new Unused(mac, at); };
+inline const ControlUnitBuilder NothingBuilder = [](Machine *mac, uint8_t at) { return new Nothing(mac, at); };
+inline const ControlUnitBuilder UnusedBuilder = [](Machine *mac, uint8_t at) { return new Unused(mac, at); };
 
-inline static std::array<ControlUnitBuilder, 16> DefaultControlUnitFactory = {
+inline const std::array<ControlUnitBuilder, 16> DefaultControlUnitFactory = {
 	NothingBuilder,
 	[](Machine *mac, uint8_t at) { return new Load1(mac, at); },
 	[](Machine *mac, uint8_t at) { return new Load2(mac, at); },
@@ -214,15 +198,15 @@ inline static std::array<ControlUnitBuilder, 16> DefaultControlUnitFactory = {
 	UnusedBuilder,
 };
 
-class Machine
-{
+class Machine {
 public:
 	Memory mem;
 	Registers reg;
 	std::ostream &log;
 	const std::array<ControlUnitBuilder, 16> controlUnitFactory;
 
-	Machine(std::ostream &logStream = std::cerr, std::array<ControlUnitBuilder, 16> controlUnitFactory = DefaultControlUnitFactory);
+	Machine(std::ostream &logStream = std::cerr,
+			std::array<ControlUnitBuilder, 16> controlUnitFactory = DefaultControlUnitFactory);
 	Machine(std::array<ControlUnitBuilder, 16> controlUnitFactory);
 
 	/// @brief Reset all registers and memory cells.
@@ -245,7 +229,8 @@ public:
 	/// otherwise `false`.
 	bool LoadProgram(std::istream &from, uint8_t at = 0);
 
-	/// @brief Run instructions indefinitely. Only returns on Step() == ShouldHalt::YES.
+	/// @brief Run instructions indefinitely. Only returns on Step() ==
+	/// ShouldHalt::YES.
 	void Run();
 
 	/// @brief Only execute the next instruction.

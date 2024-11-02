@@ -15,7 +15,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Emscripten")
   set(USE_FLAGS "-s USE_SDL=2 -s USE_FREETYPE=1")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USE_FLAGS}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USE_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_FLAGS} --shell-file ../emscripten/shell_minimal.html")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_FLAGS} --shell-file ../emscripten/shell.html")
   set(CMAKE_EXECUTABLE_SUFFIX .html)
 else()
   find_package(SDL2 REQUIRED)
@@ -59,7 +59,6 @@ add_executable(
   ${IMGUI_DIR}/misc/freetype/imgui_freetype.h
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_draw.cpp
-  ${IMGUI_DIR}/imgui_demo.cpp
   ${IMGUI_DIR}/imgui_tables.cpp
   ${IMGUI_DIR}/imgui_widgets.cpp)
 
@@ -67,6 +66,10 @@ target_link_libraries(vole-sim-gui
   ${OPENGL_LIBRARIES}
   ${SDL2_LIBRARIES}
   ${FREETYPE_LIBRARIES})
+
+if(${CMAKE_SYSTEM_NAME} MATCHES "Emscripten")
+  set_target_properties(vole-sim-gui PROPERTIES OUTPUT_NAME "index")
+endif()
 
 if(MSVC)
     if(${CMAKE_VERSION} VERSION_LESS "3.6.0")
