@@ -10,7 +10,8 @@ Compiles & works on Linux, Windows, and the Web via WebAssembly/Emscripten.
 
 ## Building
 
-**Dependencies**: CMake 3.5 or later and the headers and libraries for your OS and window system. On Unix-like systems like Linux and FreeBSD you will need a few extra packages which are documented in the [GLFW docs](https://www.glfw.org/docs/latest/compile_guide.html#compile_deps_wayland).
+**Dependencies**: CMake 3.5 or later and the headers and libraries for your OS and window system. SDL2 and FreeType development packages need to be installed
+to build the GUI.
 
 ```sh
 $ git clone --recurse-submodules git@github.com:faresbakhit/vole-sim.git
