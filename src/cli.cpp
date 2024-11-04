@@ -3,12 +3,21 @@
 #include <limits>
 #include <sstream>
 
+#include "error.h"
 #include "vole.h"
 
 #define OS_HEX1 std::hex << std::uppercase
 #define OS_HEX2 std::hex << std::uppercase << std::setfill('0') << std::setw(2)
 
 enum class base { dec, hex };
+
+class CommandLineScreen : public vole::Screen {
+	void clear() { std::cout << u8"\033[2J\033[1;1H"; }
+
+	void write(uint8_t c) { std::cout << (char)c; }
+
+	~CommandLineScreen() = default;
+};
 
 template <typename T>
 T inNumber(std::istream &in, base b = base::dec, T min = std::numeric_limits<T>::min,
@@ -80,28 +89,32 @@ void memSet(std::istream &in, vole::Memory &mem) {
 	mem[i] = val;
 }
 
+#define CYAN u8"\033[36m"
+#define RESET u8"\033[0m"
+
 int main() {
 	std::cout << ">> Welcome to the Vole Machine Simulator & GUI\n"
 			  << ">>\n"
 			  << ">> Commands\n"
 			  << ">> ========\n"
 			  << ">>\n"
-			  << ">> - load FILE: Load program from FILE and put it in memory.\n"
-			  << ">> - run: Run indefinitely.\n"
-			  << ">> - step: Only execute the next instruction.\n"
-			  << ">> - reg show: Show all registers and their values.\n"
-			  << ">> - reg get X: Get the value stored at register X.\n"
-			  << ">> - reg set X Y: Set register X to the value Y.\n"
-			  << ">> - mem show: Show all memory cells and their values.\n"
-			  << ">> - mem get X: Get the value stored at memory cell X.\n"
-			  << ">> - mem set X Y: Set memory cell X to the value Y.\n"
-			  << ">> - pc get: Get the value of the program counter.\n"
-			  << ">> - pc set X: Set the program counter to the value X.\n"
-			  << ">> - reset cpu: Reset all registers to zero.\n"
-			  << ">> - reset ram: Reset all memory cells to zero.\n"
-			  << ">> - exit: Exit the machine simulator.\n";
+			  << ">> - " CYAN "load" RESET " FILE: Load program from FILE and put it in memory.\n"
+			  << ">> - " CYAN "run" RESET ": Run indefinitely.\n"
+			  << ">> - " CYAN "step" RESET ": Only execute the next instruction.\n"
+			  << ">> - " CYAN "reg" RESET " show: Show all registers and their values.\n"
+			  << ">> - " CYAN "reg" RESET " get X: Get the value stored at register X.\n"
+			  << ">> - " CYAN "reg" RESET " set X Y: Set register X to the value Y.\n"
+			  << ">> - " CYAN "mem" RESET " show: Show all memory cells and their values.\n"
+			  << ">> - " CYAN "mem" RESET " get X: Get the value stored at memory cell X.\n"
+			  << ">> - " CYAN "mem" RESET " set X Y: Set memory cell X to the value Y.\n"
+			  << ">> - " CYAN "pc" RESET " get: Get the value of the program counter.\n"
+			  << ">> - " CYAN "pc" RESET " set X: Set the program counter to the value X.\n"
+			  << ">> - " CYAN "reset" RESET " cpu: Reset all registers to zero.\n"
+			  << ">> - " CYAN "reset" RESET " ram: Reset all memory cells to zero.\n"
+			  << ">> - " CYAN "exit" RESET ": Exit the machine simulator.\n";
 
-	vole::Machine mac;
+	vole::Screen *scr = new CommandLineScreen;
+	vole::Machine mac(scr);
 
 	do {
 		std::cerr << "> ";
@@ -117,7 +130,11 @@ int main() {
 			argstr >> arg;
 			if (arg == "load") {
 				argstr >> arg;
-				mac.LoadProgram(arg);
+				vole::error::LoadProgramError err = mac.LoadProgram(arg);
+				if (err != vole::error::LoadProgramError::NOT_AN_ERROR) {
+					std::cerr << "Error: " << arg << ": Loading program failed.\n";
+					continue;
+				}
 			} else if (arg == "run") {
 				mac.Run();
 			} else if (arg == "step") {
@@ -171,4 +188,5 @@ int main() {
 
 	std::cerr << ">> I think therefore I am!\n";
 	std::cerr << ">> Moriturus te saluto.!\n";
+	delete scr;
 }

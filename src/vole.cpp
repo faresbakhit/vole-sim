@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "error.h"
 #include "vole.h"
 
 using namespace vole;
@@ -11,36 +12,31 @@ using namespace vole;
 #define OS_HEX1 std::hex << std::uppercase
 #define OS_HEX2 std::hex << std::uppercase << std::setfill('0') << std::setw(2)
 
-Machine::Machine(std::ostream &logStream, const std::array<ControlUnitBuilder, 16> cuFactory)
-	: log(logStream), controlUnitFactory(cuFactory) {}
+Machine::Machine(Screen *screen, const std::array<ControlUnitBuilder, 16> cuFactory)
+	: controlUnitFactory(cuFactory), scr(screen) {}
 
-Machine::Machine(const std::array<ControlUnitBuilder, 16> cuFactory) : log(std::cerr), controlUnitFactory(cuFactory) {}
-
-bool Machine::LoadProgram(const std::string &path, uint8_t addr) {
+error::LoadProgramError Machine::LoadProgram(const std::string &path, uint8_t addr) {
 	std::ifstream ifs(path);
-	if (ifs.fail()) {
-		log << "Loading program failed.\n";
-		return false;
+	if (!ifs.is_open()) {
+		return error::LoadProgramError::FILE_OPEN_FAILED;
 	}
 	return LoadProgram(ifs, addr);
 }
 
-bool Machine::LoadProgram(std::istream &stream, uint8_t addr) {
+error::LoadProgramError Machine::LoadProgram(std::istream &stream, uint8_t addr) {
 	uint16_t inst;
 	for (size_t i = addr; !stream.eof(); i += 2) {
 		if (i >= 2 * 128) {
-			log << "Program too big (>128 instructions).\n";
-			return false;
+			return error::LoadProgramError::TOO_MUCH_INSTRUCTIONS;
 		}
 		stream >> std::hex >> inst;
 		if (stream.fail()) {
-			log << "Loading program failed.\n";
-			return false;
+			return error::LoadProgramError::STREAM_READ_FAILED;
 		}
 		mem[i] = inst >> 8;
 		mem[i + 1] = inst & 0x00FF;
 	}
-	return true;
+	return error::LoadProgramError::NOT_AN_ERROR;
 }
 
 void Machine::Reset() {
@@ -50,6 +46,7 @@ void Machine::Reset() {
 
 void Machine::Run() {
 	do {
+		// Doin' what? nothing...
 	} while (Step() != ShouldHalt::YES);
 }
 
@@ -139,7 +136,15 @@ std::string Load2::Humanize() {
 ShouldHalt Store::Execute() {
 	uint8_t r = operand1;
 	uint16_t xy = operandXY;
-	mac->mem[xy] = mac->reg[r];
+	uint8_t val = mac->reg[r];
+	mac->mem[xy] = val;
+	if (xy == 0x00) {
+		if (val != 0) {
+			mac->scr->write(val);
+		} else {
+			mac->scr->clear();
+		}
+	}
 	return ShouldHalt::NO;
 }
 
@@ -275,10 +280,7 @@ std::string Halt::Humanize() {
 	return os.str();
 }
 
-ShouldHalt Unused::Execute() {
-	mac->log << "Unspecified op-code " << opcode << " used. Halting.\n";
-	return ShouldHalt::YES;
-}
+ShouldHalt Unused::Execute() { return ShouldHalt::YES; }
 
 std::string Unused::Humanize() {
 	std::ostringstream os;
@@ -286,6 +288,7 @@ std::string Unused::Humanize() {
 	return os.str();
 }
 
+Screen::~Screen() = default;
 ControlUnit::~ControlUnit() = default;
 Nothing::~Nothing() = default;
 Load1::~Load1() = default;
@@ -302,43 +305,32 @@ Jump::~Jump() = default;
 Halt::~Halt() = default;
 Unused::~Unused() = default;
 
-float Float::Decode(uint8_t val) {
-	bool sign;	  // 1 bit
-	int exponent; // 3 bits
-	int mantissa; // 4 bits
-
-	sign = (val >> 7) & 0x1;
-	exponent = (val >> 4) & 0x7;
-	mantissa = val & 0xF;
-
-	float mantissa_value = mantissa / 16.f; // Normalizing the mantissa
-	float exponent_value = exponent - 4;	// Adjusting with bias
-	float result = mantissa_value * std::pow(2, exponent_value);
-	return sign ? -result : result;
+float Float::Decode(uint8_t byte) {
+	int sig = (byte & (1 << 7)) ? -1 : 1;
+	int exp = ((byte >> 4) & 0x7) - 4;
+	int man = (byte & 0xF) | 0x10;
+	return (std::exp2f(exp) * ((man & 16) != 0) + std::exp2f(exp - 1) * ((man & 8) != 0) +
+			std::exp2f(exp - 2) * ((man & 4) != 0) + std::exp2f(exp - 3) * ((man & 2) != 0) +
+			std::exp2f(exp - 4) * ((man & 1) != 0)) *
+		   sig;
 }
 
-uint8_t Float::Encode(float val) {
-	bool sign;	  // 1 bit
-	int exponent; // 3 bits
-	int mantissa; // 4 bits
+uint8_t Float::Encode(float number) {
+	uint8_t sig = (number < 0) ? 1 : 0;
+	number = std::fabs(number);
 
-	if (val < 0) {
-		sign = 1;
-		val = -val;
-	}
-
-	exponent = 0;
-	while (val >= 1.0f) {
-		val /= 2.0f;
+	int exponent = 0;
+	while (number >= 2.0f) {
+		number /= 2.0f;
 		exponent++;
 	}
-	while (val < 0.5f) {
-		val *= 2.0f;
+	while (number < 1.0f && number > 0.0f) {
+		number *= 2.0f;
 		exponent--;
 	}
 
-	exponent = exponent + 4; // Apply bias
-	mantissa = static_cast<int>(val * 16) & 0xF;
+	uint8_t exp = exponent + 4;
+	uint8_t man = static_cast<uint8_t>((number * 16) - 16);
 
-	return (sign << 7) | (exponent << 4) | (mantissa);
+	return (sig << 7) | (exp << 4) | man;
 }

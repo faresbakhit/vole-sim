@@ -5,6 +5,8 @@
 #include <functional>
 #include <iostream>
 
+#include "error.h"
+
 namespace vole {
 class Memory {
 public:
@@ -198,16 +200,21 @@ inline const std::array<ControlUnitBuilder, 16> DefaultControlUnitFactory = {
 	UnusedBuilder,
 };
 
+class Screen {
+public:
+	virtual void clear() = 0;
+	virtual void write(uint8_t) = 0;
+	virtual ~Screen();
+};
+
 class Machine {
 public:
 	Memory mem;
 	Registers reg;
-	std::ostream &log;
 	const std::array<ControlUnitBuilder, 16> controlUnitFactory;
+	Screen *scr;
 
-	Machine(std::ostream &logStream = std::cerr,
-			std::array<ControlUnitBuilder, 16> controlUnitFactory = DefaultControlUnitFactory);
-	Machine(std::array<ControlUnitBuilder, 16> controlUnitFactory);
+	Machine(Screen *, std::array<ControlUnitBuilder, 16> controlUnitFactory = DefaultControlUnitFactory);
 
 	/// @brief Reset all registers and memory cells.
 	void Reset();
@@ -219,7 +226,7 @@ public:
 	/// @param at The starting memory address to put the program at.
 	/// @return `true` if `from.fail()` never returned `true` after a read,
 	/// otherwise `false`.
-	bool LoadProgram(const std::string &fromPath, uint8_t at = 0);
+	error::LoadProgramError LoadProgram(const std::string &fromPath, uint8_t at = 0);
 
 	/// @brief Load program from `from` and put it in memory starting at cell
 	/// `at`
@@ -227,7 +234,7 @@ public:
 	/// @param at The starting memory address to put the program at.
 	/// @return `true` if `from.fail()` never returned `true` after a read,
 	/// otherwise `false`.
-	bool LoadProgram(std::istream &from, uint8_t at = 0);
+	error::LoadProgramError LoadProgram(std::istream &from, uint8_t at = 0);
 
 	/// @brief Run instructions indefinitely. Only returns on Step() ==
 	/// ShouldHalt::YES.

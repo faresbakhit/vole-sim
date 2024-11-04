@@ -37,6 +37,218 @@ class CanvasDraw : public vole::ControlUnit::ControlUnit {
 	~CanvasDraw() = default;
 };
 
+void ShowControlWindow(vole::Machine &mac, ImGuiIO &io) {
+	static int speed = 5;
+	static bool isRunning = false;
+	static unsigned int currentTime, lastTime = 0;
+
+	currentTime = SDL_GetTicks();
+
+	if (isRunning && (currentTime > lastTime + 1000 / speed)) {
+		if (mac.Step() == vole::ShouldHalt::YES) {
+			isRunning = false;
+		};
+		lastTime = currentTime;
+	}
+
+	if (ImGui::Begin("Control", NULL,
+					 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
+		ImGui::InputScalar("Program Counter", ImGuiDataType_U8, &mac.reg.pc, NULL, NULL, "%02X",
+						   ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
+		ImGui::SeparatorText("Execution");
+		if (ImGui::Button("Run until HALT", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
+			isRunning = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Run one instruction", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
+			mac.Step();
+		}
+		ImGui::SeparatorText("Speed");
+		ImGui::Text("Specify number of instructions per second (IPS):");
+		ImGui::VSliderInt("IPS", {50.f, 240}, &speed, 1, 100, "%d", ImGuiSliderFlags_ClampOnInput);
+		ImGui::End();
+	}
+}
+
+void ShowCanvasWindow() {
+	static ImVec2 scrolling(0.0f, 0.0f);
+
+	ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
+	ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
+
+	if (canvas_sz.x < 50.0f)
+		canvas_sz.x = 50.0f;
+	if (canvas_sz.y < 50.0f)
+		canvas_sz.y = 50.0f;
+	ImVec2 canvas_p1 = ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y);
+
+	// Draw border and background color
+	ImGuiIO &io = ImGui::GetIO();
+	ImDrawList *draw_list = ImGui::GetWindowDrawList();
+	draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255));
+	draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));
+
+	// This will catch our interactions
+	const ImVec2 origin(canvas_p0.x + scrolling.x, canvas_p0.y + scrolling.y);
+	const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x, io.MousePos.y - origin.y);
+
+	// Context menu (under default mouse threshold)
+	ImVec2 drag_delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+	if (drag_delta.x == 0.0f && drag_delta.y == 0.0f)
+		ImGui::OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight);
+	if (ImGui::BeginPopup("context")) {
+		if (ImGui::MenuItem("Remove one", NULL, false, canvasPoints.Size > 0)) {
+			canvasPoints.resize(canvasPoints.size() - 2);
+		}
+		if (ImGui::MenuItem("Remove all", NULL, false, canvasPoints.Size > 0)) {
+			canvasPoints.clear();
+		}
+		ImGui::EndPopup();
+	}
+
+	// Draw grid + all lines in the canvas
+	draw_list->PushClipRect(canvas_p0, canvas_p1, true);
+	const float GRID_STEP = 64.0f;
+	for (float x = fmodf(scrolling.x, GRID_STEP); x < canvas_sz.x; x += GRID_STEP)
+		draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y), ImVec2(canvas_p0.x + x, canvas_p1.y),
+						   IM_COL32(200, 200, 200, 40));
+	for (float y = fmodf(scrolling.y, GRID_STEP); y < canvas_sz.y; y += GRID_STEP)
+		draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y), ImVec2(canvas_p1.x, canvas_p0.y + y),
+						   IM_COL32(200, 200, 200, 40));
+	for (int n = 0; n < canvasPoints.Size - (canvasPoints.Size % 2); n += 2)
+		draw_list->AddLine(ImVec2(origin.x + canvasPoints[n].x, origin.y + canvasPoints[n].y),
+						   ImVec2(origin.x + canvasPoints[n + 1].x, origin.y + canvasPoints[n + 1].y),
+						   IM_COL32(255, 255, 0, 255), 2.0f);
+	draw_list->PopClipRect();
+}
+
+void ShowInstructionEditor(vole::Machine &mac) {
+	if (ImGui::BeginTable("##Instruction", 4, ImGuiTableFlags_RowBg)) {
+		ImGui::TableSetupColumn("Low Byte", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Instruction", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("High Byte", ImGuiTableColumnFlags_WidthFixed);
+		ImGui::TableSetupColumn("Note", ImGuiTableColumnFlags_WidthStretch);
+
+		for (size_t row = 0; row < (vole::Memory::SIZE >> 1); row++) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextDisabled("%02zX", 2 * row);
+			ImGui::TableSetColumnIndex(1);
+			ImGui::PushID(row);
+			ImGui::PushItemWidth(60);
+			ImGui::InputScalarN("##", ImGuiDataType_U8, &mac.mem[2 * row], 2, NULL, NULL, "%02X",
+								ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll);
+			ImGui::PopItemWidth();
+			ImGui::PopID();
+			ImGui::TableSetColumnIndex(2);
+			ImGui::TextDisabled("%02zX", 2 * row + 1);
+			ImGui::TableSetColumnIndex(3);
+			vole::ControlUnit *cu = vole::ControlUnit::Decode(&mac, 2 * row);
+			ImGui::TextUnformatted(cu->Humanize().c_str());
+			delete cu;
+			if (row == mac.reg.pc >> 1) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(39, 73, 114, 255));
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(39, 73, 114, 255));
+			}
+		}
+
+		ImGui::EndTable();
+	}
+}
+
+void ShowMainMemory(vole::Machine &mac, ImGuiIO &io) {
+	ImGui::BeginChild("Memory Table", {0, io.DisplaySize.y * 1.f / 2.f - 100}, ImGuiChildFlags_None,
+					  ImGuiWindowFlags_HorizontalScrollbar);
+	if (ImGui::BeginTable("##Memory", 4,
+						  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV)) {
+		ImGui::TableSetupColumn("Address");
+		ImGui::TableSetupColumn("Hex");
+		ImGui::TableSetupColumn("Bin");
+		ImGui::TableSetupColumn("Float");
+		ImGui::TableHeadersRow();
+
+		for (size_t row = 0; row < vole::Memory::SIZE; row++) {
+			ImGui::TableNextRow();
+
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%02zX", row);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%02X", mac.mem[row]);
+
+			ImGui::TableSetColumnIndex(2);
+			std::bitset<8> bin(mac.mem[row]);
+			ImGui::TextUnformatted(bin.to_string().c_str());
+
+			ImGui::TableSetColumnIndex(3);
+			ImGui::Text("%08f", vole::Float::Decode(mac.mem[row]));
+		}
+		ImGui::EndTable();
+	}
+	ImGui::EndChild();
+	if (ImGui::Button("Clear Memory"))
+		ImGui::OpenPopup("Clear Memory?");
+
+	if (ImGui::BeginPopupModal("Clear Memory?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::Text("Are you sure you want to reset all memory cells?");
+		ImGui::Separator();
+		if (ImGui::Button("OK", ImVec2(120, 0))) {
+			mac.mem.Reset();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void ShowRegisters(vole::Machine &mac, ImGuiIO &io) {
+	ImGui::BeginChild("Registers Table", ImVec2(0, io.DisplaySize.y * 1.f / 2.f - 100), ImGuiChildFlags_None,
+					  ImGuiWindowFlags_None);
+	if (ImGui::BeginTable("##Registers", 4,
+						  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV)) {
+		ImGui::TableSetupColumn("Register");
+		ImGui::TableSetupColumn("Hex");
+		ImGui::TableSetupColumn("Bin");
+		ImGui::TableSetupColumn("Float");
+		ImGui::TableHeadersRow();
+
+		for (size_t row = 0; row < 16; row++) {
+			ImGui::TableNextRow();
+
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%01zX", row);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%02X", mac.reg[row]);
+
+			ImGui::TableSetColumnIndex(2);
+			std::bitset<8> bin(mac.reg[row]);
+			ImGui::TextUnformatted(bin.to_string().c_str());
+
+			ImGui::TableSetColumnIndex(3);
+			ImGui::Text("%08f", vole::Float::Decode(mac.reg[row]));
+		}
+		ImGui::EndTable();
+	}
+	ImGui::EndChild();
+	if (ImGui::Button("Clear Registers")) {
+		mac.reg.Reset();
+	}
+}
+
+class GraphicalSreen : public vole::Screen {
+	void clear() { std::cout << u8"\033[2J\033[1;1H"; }
+
+	void write(uint8_t c) { std::cout << (char)c; }
+
+	~GraphicalSreen() = default;
+};
+
+
 inline static std::array<vole::ControlUnitBuilder, 16> ExtendedControlUnitFactory = {
 	vole::NothingBuilder,
 	[](vole::Machine *mac, uint8_t at) { return new vole::Load1(mac, at); },
@@ -100,8 +312,8 @@ int main(int, char **) {
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	SDL_WindowFlags window_flags =
 		(SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window *window = SDL_CreateWindow("faresbakhit/vole-sim", SDL_WINDOWPOS_CENTERED,
-										  SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+	SDL_Window *window = SDL_CreateWindow("faresbakhit/vole-sim", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280,
+										  720, window_flags);
 	if (window == nullptr) {
 		printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
 		return -1;
@@ -134,12 +346,11 @@ int main(int, char **) {
 
 	// Our state
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	vole::Machine mac = vole::Machine(ExtendedControlUnitFactory);
+	vole::Screen* scr = new GraphicalSreen;
+	vole::Machine mac = vole::Machine(nullptr, ExtendedControlUnitFactory);
 	*mac.mem.Array() = vole::example::DRAW;
-
-	int speed = 5;
-	bool isRunning = false;
-	unsigned int currentTime, lastTime = 0;
+	const ImGuiWindowFlags windowFlags =
+		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
 
 	// Main loop
 	bool done = false;
@@ -168,220 +379,40 @@ int main(int, char **) {
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 
-		currentTime = SDL_GetTicks();
-		if (isRunning && (currentTime > lastTime + 1000 / speed)) {
-			if (mac.Step() == vole::ShouldHalt::YES) {
-				isRunning = false;
-			};
-			lastTime = currentTime;
-		}
-
 		ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
 		ImGui::SetNextWindowPos({io.DisplaySize.x * 1.f / 3.f, 0});
-		if (ImGui::Begin("Control", NULL,
-						 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
-			ImGui::InputScalar("Program Counter", ImGuiDataType_U8, &mac.reg.pc, NULL, NULL, "%02X",
-							   ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase);
-			ImGui::SeparatorText("Execution");
-			if (ImGui::Button("Run until HALT", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
-				isRunning = true;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Run one instruction", {io.DisplaySize.x * 1.f / 6.f - 20, 100})) {
-				mac.Step();
-			}
-			ImGui::SeparatorText("Speed");
-			ImGui::Text("Specify number of instructions per second (IPS):");
-			ImGui::VSliderInt("IPS", {50.f, 240}, &speed, 1, 100, "%d", ImGuiSliderFlags_ClampOnInput);
+		if (ImGui::Begin("Control", NULL, windowFlags)) {
+			ShowControlWindow(mac, io);
 			ImGui::End();
 		}
 
 		ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
 		ImGui::SetNextWindowPos({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
-		if (ImGui::Begin("Canvas", NULL,
-						 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
-			static ImVec2 scrolling(0.0f, 0.0f);
-
-			ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
-			ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
-
-			if (canvas_sz.x < 50.0f)
-				canvas_sz.x = 50.0f;
-			if (canvas_sz.y < 50.0f)
-				canvas_sz.y = 50.0f;
-			ImVec2 canvas_p1 = ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y);
-
-			// Draw border and background color
-			ImGuiIO &io = ImGui::GetIO();
-			ImDrawList *draw_list = ImGui::GetWindowDrawList();
-			draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255));
-			draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));
-
-			// This will catch our interactions
-			const ImVec2 origin(canvas_p0.x + scrolling.x, canvas_p0.y + scrolling.y);
-			const ImVec2 mouse_pos_in_canvas(io.MousePos.x - origin.x, io.MousePos.y - origin.y);
-
-			// Context menu (under default mouse threshold)
-			ImVec2 drag_delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
-			if (drag_delta.x == 0.0f && drag_delta.y == 0.0f)
-				ImGui::OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight);
-			if (ImGui::BeginPopup("context")) {
-				if (ImGui::MenuItem("Remove one", NULL, false, canvasPoints.Size > 0)) {
-					canvasPoints.resize(canvasPoints.size() - 2);
-				}
-				if (ImGui::MenuItem("Remove all", NULL, false, canvasPoints.Size > 0)) {
-					canvasPoints.clear();
-				}
-				ImGui::EndPopup();
-			}
-
-			// Draw grid + all lines in the canvas
-			draw_list->PushClipRect(canvas_p0, canvas_p1, true);
-			const float GRID_STEP = 64.0f;
-			for (float x = fmodf(scrolling.x, GRID_STEP); x < canvas_sz.x; x += GRID_STEP)
-				draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y), ImVec2(canvas_p0.x + x, canvas_p1.y),
-								   IM_COL32(200, 200, 200, 40));
-			for (float y = fmodf(scrolling.y, GRID_STEP); y < canvas_sz.y; y += GRID_STEP)
-				draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y), ImVec2(canvas_p1.x, canvas_p0.y + y),
-								   IM_COL32(200, 200, 200, 40));
-			for (int n = 0; n < canvasPoints.Size - (canvasPoints.Size % 2); n += 2)
-				draw_list->AddLine(ImVec2(origin.x + canvasPoints[n].x, origin.y + canvasPoints[n].y),
-								   ImVec2(origin.x + canvasPoints[n + 1].x, origin.y + canvasPoints[n + 1].y),
-								   IM_COL32(255, 255, 0, 255), 2.0f);
-			draw_list->PopClipRect();
-
+		if (ImGui::Begin("Canvas", NULL, windowFlags)) {
+			ShowCanvasWindow();
 			ImGui::End();
 		}
 
 		ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y});
 		ImGui::SetNextWindowPos({0, 0});
-		if (ImGui::Begin("Instruction Editor", NULL,
-						 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
-			if (ImGui::BeginTable("##Instruction", 4, ImGuiTableFlags_RowBg)) {
-				ImGui::TableSetupColumn("Low Byte", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Instruction", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("High Byte", ImGuiTableColumnFlags_WidthFixed);
-				ImGui::TableSetupColumn("Note", ImGuiTableColumnFlags_WidthStretch);
-
-				for (size_t row = 0; row < (vole::Memory::SIZE >> 1); row++) {
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					ImGui::TextDisabled("%02zX", 2 * row);
-					ImGui::TableSetColumnIndex(1);
-					ImGui::PushID(row);
-					ImGui::PushItemWidth(60);
-					ImGui::InputScalarN("##", ImGuiDataType_U8, &mac.mem[2 * row], 2, NULL, NULL, "%02X",
-										ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AutoSelectAll);
-					ImGui::PopItemWidth();
-					ImGui::PopID();
-					ImGui::TableSetColumnIndex(2);
-					ImGui::TextDisabled("%02zX", 2 * row + 1);
-					ImGui::TableSetColumnIndex(3);
-					vole::ControlUnit *cu = vole::ControlUnit::Decode(&mac, 2 * row);
-					ImGui::TextUnformatted(cu->Humanize().c_str());
-					delete cu;
-					if (row == mac.reg.pc >> 1) {
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(39, 73, 114, 255));
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(39, 73, 114, 255));
-					}
-				}
-
-				ImGui::EndTable();
-			}
+		if (ImGui::Begin("Instruction Editor", NULL, windowFlags)) {
+			ShowInstructionEditor(mac);
 			ImGui::End();
 		}
 
 		ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
 		ImGui::SetNextWindowPos({io.DisplaySize.x * 2.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
-		if (ImGui::Begin("Main Memory", NULL,
-						 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
-			ImGui::BeginChild("Memory Table", {0, io.DisplaySize.y * 1.f / 2.f - 100}, ImGuiChildFlags_None,
-							  ImGuiWindowFlags_HorizontalScrollbar);
-			if (ImGui::BeginTable("##Memory", 4,
-								  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV)) {
-				ImGui::TableSetupColumn("Address");
-				ImGui::TableSetupColumn("Hex");
-				ImGui::TableSetupColumn("Bin");
-				ImGui::TableSetupColumn("Float");
-				ImGui::TableHeadersRow();
-
-				for (size_t row = 0; row < vole::Memory::SIZE; row++) {
-					ImGui::TableNextRow();
-
-					ImGui::TableSetColumnIndex(0);
-					ImGui::Text("%02zX", row);
-
-					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%02X", mac.mem[row]);
-
-					ImGui::TableSetColumnIndex(2);
-					std::bitset<8> bin(mac.mem[row]);
-					ImGui::TextUnformatted(bin.to_string().c_str());
-
-					ImGui::TableSetColumnIndex(3);
-					ImGui::Text("%08f", vole::Float::Decode(mac.mem[row]));
-				}
-				ImGui::EndTable();
-			}
-			ImGui::EndChild();
-			if (ImGui::Button("Clear Memory"))
-				ImGui::OpenPopup("Clear Memory?");
-
-			if (ImGui::BeginPopupModal("Clear Memory?", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-				ImGui::Text("Are you sure you want to reset all memory cells?");
-				ImGui::Separator();
-				if (ImGui::Button("OK", ImVec2(120, 0))) {
-					mac.mem.Reset();
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::SetItemDefaultFocus();
-				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
+		if (ImGui::Begin("Main Memory", NULL, windowFlags)) {
+			ShowMainMemory(mac, io);
+			ImGui::End();
 		}
-		ImGui::End();
 
 		ImGui::SetNextWindowSize({io.DisplaySize.x * 1.f / 3.f, io.DisplaySize.y * 1.f / 2.f});
 		ImGui::SetNextWindowPos({io.DisplaySize.x * 2.f / 3.f, 0});
-		if (ImGui::Begin("Registers", NULL,
-						 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse)) {
-			ImGui::BeginChild("Registers Table", ImVec2(0, io.DisplaySize.y * 1.f / 2.f - 100), ImGuiChildFlags_None,
-							  ImGuiWindowFlags_None);
-			if (ImGui::BeginTable("##Registers", 4,
-								  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersH | ImGuiTableFlags_BordersInnerV)) {
-				ImGui::TableSetupColumn("Register");
-				ImGui::TableSetupColumn("Hex");
-				ImGui::TableSetupColumn("Bin");
-				ImGui::TableSetupColumn("Float");
-				ImGui::TableHeadersRow();
-
-				for (size_t row = 0; row < 16; row++) {
-					ImGui::TableNextRow();
-
-					ImGui::TableSetColumnIndex(0);
-					ImGui::Text("%01zX", row);
-
-					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%02X", mac.reg[row]);
-
-					ImGui::TableSetColumnIndex(2);
-					std::bitset<8> bin(mac.reg[row]);
-					ImGui::TextUnformatted(bin.to_string().c_str());
-
-					ImGui::TableSetColumnIndex(3);
-					ImGui::Text("%08f", vole::Float::Decode(mac.reg[row]));
-				}
-				ImGui::EndTable();
-			}
-			ImGui::EndChild();
-			if (ImGui::Button("Clear Registers")) {
-				mac.reg.Reset();
-			}
+		if (ImGui::Begin("Registers", NULL, windowFlags)) {
+			ShowRegisters(mac, io);
+			ImGui::End();
 		}
-		ImGui::End();
 
 		// Rendering
 		ImGui::Render();
@@ -404,6 +435,8 @@ int main(int, char **) {
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
+
+	delete scr;
 
 	return 0;
 }
